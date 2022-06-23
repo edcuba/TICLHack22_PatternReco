@@ -1,0 +1,67 @@
+import matplotlib.pyplot as plt
+
+def get_bounding_box(tracksters, simtracksters, eid):
+    # get the trackster barycenters for event eid
+    bx = tracksters["barycenter_x"].array()[eid]
+    by = tracksters["barycenter_y"].array()[eid]
+    bz = tracksters["barycenter_z"].array()[eid]
+    sbx = simtracksters["stsSC_barycenter_x"].array()[eid]
+    sby = simtracksters["stsSC_barycenter_y"].array()[eid]
+    sbz = simtracksters["stsSC_barycenter_z"].array()[eid]
+
+    # get approximate plottable area
+    x_max = max([max(bx), max(sbx)]) + 10
+    x_min = min([min(bx), min(sbx)]) - 10
+    y_max = max([max(by), max(sby)]) + 10
+    y_min = min([min(by), min(sby)]) - 10
+    z_max = max([max(bz), max(sbz)]) + 10
+    z_min = min([min(bz), min(sbz)]) - 10
+
+    return x_max, x_min, y_max, y_min, z_max, z_min
+
+def plot_event(tracksters, simtracksters, eid):
+    """
+    Plot Reco and Sim tracksters in the event
+    """
+    x_max, x_min, y_max, y_min, z_max, z_min = get_bounding_box(tracksters, simtracksters, eid)
+
+    # get the layerclusters for event eid
+    vx = tracksters["vertices_x"].array()[eid]
+    vy = tracksters["vertices_y"].array()[eid]
+    vz = tracksters["vertices_z"].array()[eid]
+    svx = simtracksters["stsSC_vertices_x"].array()[eid]
+    svy = simtracksters["stsSC_vertices_y"].array()[eid]
+    svz = simtracksters["stsSC_vertices_z"].array()[eid]
+
+    fig = plt.figure(figsize=(12, 10))
+
+    ax = fig.add_subplot(121, projection='3d')
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_zlim(z_min, z_max)
+    for i, x, y, z in zip(range(len(vx)), vx, vy, vz):
+        ax.scatter(x, y, z, label=i)
+    ax.set_title(f"Event {eid}: Layerclusters reco")
+    ax.legend()
+
+    ax = fig.add_subplot(122, projection='3d')
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_zlim(z_min, z_max)
+    for i, x, y, z in zip(range(len(svx)), svx, svy, svz):
+        ax.scatter(x, y, z, label=i)
+    ax.set_title(f"Event {eid}: Layerclusters sim")
+    ax.legend()
+
+
+def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions):
+    fig = plt.figure(figsize=(16, 4))
+    ax = fig.add_subplot(131)
+    ax.set_title("Highest shared energy fraction")
+    ax.hist(all_fractions, bins=20)
+    ax = fig.add_subplot(132)
+    ax.set_title("Energy fractions of complete tracksters")
+    ax.hist(complete_fractions, bins=20)
+    ax = fig.add_subplot(133)
+    ax.set_title("Energy fractions of incomplete tracksters")
+    ax.hist(incomplete_fractions, bins=20)
