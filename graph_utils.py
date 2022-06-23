@@ -18,7 +18,7 @@ def create_graph(trk_x, trk_y, trk_z, trk_energy, N=1):
     distance = distance_matrix(trk_x, trk_y, trk_z)
     G = nx.Graph()
     for i in range(len(trk_energy)):
-        G.add_node(i, pos = (trk_x[i], trk_y[i], trk_z[i]))
+        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]))
 
         # sort indices by distance
         idx_by_distance = np.argsort(distance[i])
@@ -39,5 +39,6 @@ def load_tree(tree, N=4):
     vy = tree['vertices_y'].array()
     vz = tree['vertices_z'].array()
     energy = tree['vertices_energy'].array()
-    for tx, ty, tz, te in zip(vx, vy, vz, energy):
-        yield create_graph(tx, ty, tz, te, N=N)
+    labels = tree['trackster_label'].array()
+    for tx, ty, tz, te, tl in zip(vx, vy, vz, energy, labels):
+        yield create_graph(tx, ty, tz, te, N=N), tl
