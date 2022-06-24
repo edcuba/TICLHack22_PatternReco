@@ -41,4 +41,4 @@ def load_tree(tree, N=4):
     energy = tree['vertices_energy'].array()
     labels = tree['trackster_label'].array()
     for tx, ty, tz, te, tl in zip(vx, vy, vz, energy, labels):
-        yield create_graph(tx, ty, tz, te, N=N), tl
+        yield create_graph(tx, ty, tz, te, N=N), tl, te
