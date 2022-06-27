@@ -136,3 +136,35 @@ def unfold_tracksters(tracksters, eids):
         (eid, list(range(tracksters["NTracksters"].array()[eid])))
         for eid in eids
     ]
+
+
+def get_pairs(incomplete_tuples, tracksters, simtracksters, associations):
+    pairs = []
+    for eid, idxs in incomplete_tuples:
+        r2si = associations["tsCLUE3D_recoToSim_SC"].array()[eid]
+        r2s = associations["tsCLUE3D_recoToSim_SC_score"].array()[eid]
+        for idx in idxs:
+            match = np.argmin(r2s[idx])
+            sidx = r2si[idx][match]
+            # id of simtrackster it should merge with
+            reco_fr, reco_st = get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associations, eid)
+
+            matches = np.where(np.array(reco_st) == sidx)[0]
+            candidates = sorted(matches, key=lambda x: reco_fr[x], reverse=True)
+
+            if not candidates:
+                print("Error: No candidates found (mismatch?)")
+                continue
+
+            candidate = candidates[0]
+
+            unmatches = np.where(np.array(reco_st) != sidx)[0]
+            for unmatch in unmatches:
+                pairs.append((eid, idx, unmatch, 0))
+
+            if candidate == idx:
+                print("Error: Can't merge with itself (mismatch?)")
+                continue
+
+            pairs.append((eid, idx, candidate, 1))
+    return pairs
