@@ -1,5 +1,5 @@
 import numpy as np
-from plotting_utils import plot_fractions_hist
+from .plotting_utils import plot_fractions_hist
 
 
 def get_eid_splits(tracksters, simtracksters, associations, match_threshold=0.2):

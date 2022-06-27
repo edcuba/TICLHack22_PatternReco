@@ -3,7 +3,7 @@ import torch
 
 from torch_geometric.data import Data
 from torch_geometric.data import InMemoryDataset
-from graph_utils import load_tree
+from .graph_utils import load_tree
 
 
 class HGCALTracksters(InMemoryDataset):
