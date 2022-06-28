@@ -70,7 +70,7 @@ def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions)
     ax.hist(incomplete_fractions, bins=20)
 
 
-def plot_graph_3D(G, color, ax=None):
+def plot_graph_3D(G, color, ax=None, edges=True):
     # Get node positions
     pos = nx.get_node_attributes(G, 'pos')
 
@@ -94,10 +94,11 @@ def plot_graph_3D(G, color, ax=None):
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted
-        for j in G.edges():
-            x = np.array((pos[j[0]][0], pos[j[1]][0]))
-            y = np.array((pos[j[0]][1], pos[j[1]][1]))
-            z = np.array((pos[j[0]][2], pos[j[1]][2]))
+        if edges:
+            for j in G.edges():
+                x = np.array((pos[j[0]][0], pos[j[1]][0]))
+                y = np.array((pos[j[0]][1], pos[j[1]][1]))
+                z = np.array((pos[j[0]][2], pos[j[1]][2]))
 
-            # Plot the connecting lines
-            ax.plot(x, y, z, c='black', alpha=0.5)
+                # Plot the connecting lines
+                ax.plot(x, y, z, c='black', alpha=0.5)
