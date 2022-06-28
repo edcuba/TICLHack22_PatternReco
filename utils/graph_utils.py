@@ -18,7 +18,7 @@ def create_graph(trk_x, trk_y, trk_z, trk_energy, N=1):
     distance = distance_matrix(trk_x, trk_y, trk_z)
     G = nx.Graph()
     for i in range(len(trk_energy)):
-        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]))
+        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i])
 
         # sort indices by distance
         idx_by_distance = np.argsort(distance[i])
@@ -34,7 +34,7 @@ def create_graph(trk_x, trk_y, trk_z, trk_energy, N=1):
     return G
 
 
-def load_tree(tree, N=4):
+def load_tree(tree, N=2):
     vx = tree['vertices_x'].array()
     vy = tree['vertices_y'].array()
     vz = tree['vertices_z'].array()
@@ -42,3 +42,22 @@ def load_tree(tree, N=4):
     labels = tree['trackster_label'].array()
     for tx, ty, tz, te, tl in zip(vx, vy, vz, energy, labels):
         yield create_graph(tx, ty, tz, te, N=N), tl, te
+
+
+def load_pairs(tree, N=2):
+    for tx, ty, tz, te, cx, cy, cz, ce, pl, pe, pf in zip(
+        tree['trackster_x'].array(),
+        tree['trackster_y'].array(),
+        tree['trackster_z'].array(),
+        tree['trackster_energy'].array(),
+        tree['candidate_x'].array(),
+        tree['candidate_y'].array(),
+        tree['candidate_z'].array(),
+        tree['candidate_energy'].array(),
+        tree['pair_label'].array(),
+        tree['pair_event'].array(),
+        tree['pair_fileid'].array(),
+    ):
+        t = create_graph(tx, ty, tz, te, N=N)
+        c = create_graph(cx, cy, cz, ce, N=N)
+        yield t, c, pl, pe, pf

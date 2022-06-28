@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+
 
 def get_bounding_box(tracksters, simtracksters, eid):
     # get the trackster barycenters for event eid
@@ -65,3 +68,36 @@ def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions)
     ax = fig.add_subplot(133)
     ax.set_title("Energy fractions of incomplete tracksters")
     ax.hist(incomplete_fractions, bins=20)
+
+
+def plot_graph_3D(G, color, ax=None):
+    # Get node positions
+    pos = nx.get_node_attributes(G, 'pos')
+
+    # 3D network plot
+    with plt.style.context(('ggplot')):
+
+        if ax == None:
+            fig = plt.figure(figsize=(10, 7))
+            ax = fig.add_subplot(111, projection='3d')
+
+        # Loop on the pos dictionary to extract the x,y,z coordinates of each node
+        xi = []
+        yi = []
+        zi = []
+        for value in pos.values():
+            xi.append(value[0])
+            yi.append(value[1])
+            zi.append(value[2])
+
+        ax.scatter(xi, yi, zi, s=30, c=color)#, cmap='rainbow', s=20+20*G.degree(key), edgecolors='k', alpha=0.7)
+
+        # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
+        # Those two points are the extrema of the line to be plotted
+        for j in G.edges():
+            x = np.array((pos[j[0]][0], pos[j[1]][0]))
+            y = np.array((pos[j[0]][1], pos[j[1]][1]))
+            z = np.array((pos[j[0]][2], pos[j[1]][2]))
+
+            # Plot the connecting lines
+            ax.plot(x, y, z, c='black', alpha=0.5)
