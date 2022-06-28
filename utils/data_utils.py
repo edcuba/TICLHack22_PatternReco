@@ -43,6 +43,48 @@ class HGCALTracksters(InMemoryDataset):
             torch.save((data, slices), target)
 
 
+class BaseTracksterPairs(InMemoryDataset):
+
+    def __init__(self, root, kind="photon", transform=None, pre_transform=None, pre_filter=None):
+        super().__init__(root, transform, pre_transform, pre_filter)
+
+        if kind == "photon":
+            self.data, self.slices = torch.load(self.processed_paths[0])
+        elif kind == "pion":
+            self.data, self.slices = torch.load(self.processed_paths[1])
+        else:
+            raise RuntimeError("kind should be in ['pion', 'photon']")
+
+    @property
+    def raw_file_names(self):
+        return ['trackster_pairs_10ke_photon.root', 'trackster_pairs_10ke_pion.root']
+
+    @property
+    def processed_file_names(self):
+        return ['base_pairs_photon.pt', 'base_pairs_pion.pt']
+
+    def process(self):
+        for source, target in zip(self.raw_file_names, self.processed_paths):
+            print(f"Processing: {source}")
+            path = f"{self.root}/{source}"
+            pairs = uproot.open({path: "tracksters"})
+
+            dataset = []
+            te = pairs['trackster_energy'].array()
+
+            for te, ce, pl in zip(
+                pairs['trackster_energy'].array(),
+                pairs['candidate_energy'].array(),
+                pairs['pair_label'].array()
+            ):
+                dataset.append(
+                    Data(torch.tensor([len(te), len(ce), sum(te), sum(ce)]).reshape(1, -1), y=torch.tensor(pl))
+                )
+
+            data, slices = self.collate(dataset)
+            torch.save((data, slices), target)
+
+
 class HGCALTracksterPairs(InMemoryDataset):
 
     def __init__(self, root, kind="photon", transform=None, pre_transform=None, pre_filter=None):
