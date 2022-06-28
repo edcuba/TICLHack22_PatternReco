@@ -20,11 +20,11 @@ class HGCALTracksters(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ['tracksters_ds_100e.root', 'tracksters_ds_pion.root']
+        return ['trackster_tags_10ke_photon.root', 'trackster_tags_10ke_pion.root']
 
     @property
     def processed_file_names(self):
-        return ['photon.pt', 'pion.pt']
+        return ['tags_photon.pt', 'tags_pion.pt']
 
     def process(self):
         for source, target in zip(self.raw_file_names, self.processed_paths):
