@@ -1,5 +1,6 @@
 import uproot
 import torch
+import numpy as np
 
 from torch_geometric.data import Data
 from torch_geometric.data import InMemoryDataset
@@ -51,17 +52,20 @@ class BaseTracksterPairs(InMemoryDataset):
         if kind == "photon":
             self.data, self.slices = torch.load(self.processed_paths[0])
         elif kind == "pion":
-            self.data, self.slices = torch.load(self.processed_paths[1])
+            # self.data, self.slices = torch.load(self.processed_paths[1])
+            raise RuntimeError("Pion pairs are not available yet - single pion only")
         else:
             raise RuntimeError("kind should be in ['pion', 'photon']")
 
     @property
     def raw_file_names(self):
-        return ['trackster_pairs_10ke_photon.root', 'trackster_pairs_10ke_pion.root']
+        # 'trackster_pairs_10ke_pion.root'
+        return ['trackster_pairs_10ke_photon.root']
 
     @property
     def processed_file_names(self):
-        return ['base_pairs_photon.pt', 'base_pairs_pion.pt']
+        # 'base_pairs_pion.pt'
+        return ['base_pairs_photon.pt']
 
     def process(self):
         for source, target in zip(self.raw_file_names, self.processed_paths):
@@ -72,14 +76,41 @@ class BaseTracksterPairs(InMemoryDataset):
             dataset = []
             te = pairs['trackster_energy'].array()
 
-            for te, ce, pl in zip(
+            for tx, ty, tz, te, cx, cy, cz, ce, pl in zip(
+                pairs['trackster_x'].array(),
+                pairs['trackster_y'].array(),
+                pairs['trackster_z'].array(),
                 pairs['trackster_energy'].array(),
+                pairs['candidate_x'].array(),
+                pairs['candidate_y'].array(),
+                pairs['candidate_z'].array(),
                 pairs['candidate_energy'].array(),
                 pairs['pair_label'].array()
             ):
-                dataset.append(
-                    Data(torch.tensor([len(te), len(ce), sum(te), sum(ce)]).reshape(1, -1), y=torch.tensor(pl))
-                )
+                # compute barycenters
+                tbx = np.average(tx, weights=te)
+                tby = np.average(ty, weights=te)
+                tbz = np.average(tz, weights=te)
+
+                cbx = np.average(cx, weights=ce)
+                cby = np.average(cy, weights=ce)
+                cbz = np.average(cz, weights=ce)
+
+                # euclidian distances
+                ed = np.linalg.norm(np.array((tbx, tby, tbz)) - np.array((cbx, cby, cbz)))
+                ed2 = np.linalg.norm(np.array((tbx, tby)) - np.array((cbx, cby)))
+
+                dataset.append(Data(
+                    torch.tensor([
+                        len(te),
+                        sum(te),
+                        len(ce),
+                        sum(ce),
+                        ed,
+                        ed2,
+                    ]).type(torch.float).reshape(1, -1),
+                    y=torch.tensor(pl),
+                ))
 
             data, slices = self.collate(dataset)
             torch.save((data, slices), target)
