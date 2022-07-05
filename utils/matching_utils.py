@@ -51,9 +51,8 @@ def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associa
     st_raw_energy = np.array(simtracksters["stsSC_raw_energy"].array()[eid])
 
     # get the shared energy mapping
-    # sim to reco, not reco to sim (naming is wring, use simToReco indices)
     s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
-    s2r_SE = np.array(associations["tsCLUE3D_recoToSim_SC_sharedE"].array()[eid])
+    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
 
     # keep the highest fraction
     reco_fr = [0] * num_rec_t
@@ -75,7 +74,7 @@ def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associa
 
 
 
-def split_on_shared_energy(tracksters, simtracksters, associations, event_eids, complete_threshold=0.5, histogram=False):
+def split_on_shared_energy(tracksters, simtracksters, h_frac, event_eids, complete_threshold=0.5, histogram=False):
     """
     Compute complete and incomplete tracksters based on shared energy
     """
@@ -95,12 +94,7 @@ def split_on_shared_energy(tracksters, simtracksters, associations, event_eids, 
         num_extra_t = num_rec_t - num_sim_t
 
         # get highest energy fraction simtracksters
-        reco_fr, _ = get_highest_energy_fraction_simtracksters(
-            tracksters,
-            simtracksters,
-            associations,
-            split_eid
-        )
+        reco_fr, _ = h_frac[split_eid]
 
         # sort the tracksters by the energy fraction
         sorted_t_by_fr = sorted(range(len(reco_fr)), key=lambda x: reco_fr[x])
@@ -138,33 +132,42 @@ def unfold_tracksters(tracksters, eids):
     ]
 
 
-def get_pairs(incomplete_tuples, tracksters, simtracksters, associations):
+def get_pairs(incomplete_tuples, associations, h_frac):
     pairs = []
+    w_itself = 0
+    w_none = 0
+
     for eid, idxs in incomplete_tuples:
         r2si = associations["tsCLUE3D_recoToSim_SC"].array()[eid]
         r2s = associations["tsCLUE3D_recoToSim_SC_score"].array()[eid]
+
+        # id of simtrackster it should merge with
+        reco_fr, reco_st = h_frac[eid]
+
         for idx in idxs:
             match = np.argmin(r2s[idx])
             sidx = r2si[idx][match]
-            # id of simtrackster it should merge with
-            reco_fr, reco_st = get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associations, eid)
 
             matches = np.where(np.array(reco_st) == sidx)[0]
             candidates = sorted(matches, key=lambda x: reco_fr[x], reverse=True)
 
             if not candidates:
-                print("Error: No candidates found (mismatch?)")
+                # no candidates to merge with
+                w_none += 1
                 continue
 
-            candidate = candidates[0]
+            if candidates[0] == idx:
+                # merging with itself?
+                w_itself += 1
+                continue
+
+            pairs.append((eid, idx, candidates[0], 1))
 
             unmatches = np.where(np.array(reco_st) != sidx)[0]
             for unmatch in unmatches:
+                # add up to 1 unmatch
                 pairs.append((eid, idx, unmatch, 0))
+                break
 
-            if candidate == idx:
-                print("Error: Can't merge with itself (mismatch?)")
-                continue
-
-            pairs.append((eid, idx, candidate, 1))
+    print("Pairs:", len(pairs), "No candidates:", w_none, "Merging with itself:", w_itself)
     return pairs

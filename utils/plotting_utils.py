@@ -22,7 +22,7 @@ def get_bounding_box(tracksters, simtracksters, eid):
 
     return x_max, x_min, y_max, y_min, z_max, z_min
 
-def plot_event(tracksters, simtracksters, eid):
+def plot_event(tracksters, simtracksters, eid, legend=True):
     """
     Plot Reco and Sim tracksters in the event
     """
@@ -45,7 +45,8 @@ def plot_event(tracksters, simtracksters, eid):
     for i, x, y, z in zip(range(len(vx)), vx, vy, vz):
         ax.scatter(x, y, z, label=i)
     ax.set_title(f"Event {eid}: Layerclusters reco")
-    ax.legend()
+    if legend:
+        ax.legend()
 
     ax = fig.add_subplot(122, projection='3d')
     ax.set_xlim(x_min, x_max)
@@ -54,7 +55,8 @@ def plot_event(tracksters, simtracksters, eid):
     for i, x, y, z in zip(range(len(svx)), svx, svy, svz):
         ax.scatter(x, y, z, label=i)
     ax.set_title(f"Event {eid}: Layerclusters sim")
-    ax.legend()
+    if legend:
+        ax.legend()
 
 
 def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions):
