@@ -32,9 +32,14 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
     vx = tracksters["vertices_x"].array()[eid]
     vy = tracksters["vertices_y"].array()[eid]
     vz = tracksters["vertices_z"].array()[eid]
+    ve = tracksters["vertices_energy"].array()[eid]
+
     svx = simtracksters["stsSC_vertices_x"].array()[eid]
     svy = simtracksters["stsSC_vertices_y"].array()[eid]
     svz = simtracksters["stsSC_vertices_z"].array()[eid]
+    sve = simtracksters["stsSC_vertices_energy"].array()[eid]
+    svi = simtracksters["stsSC_vertices_indexes"].array()[eid]
+    svm = simtracksters["stsSC_vertices_multiplicity"].array()[eid]
 
     fig = plt.figure(figsize=(12, 10))
 
@@ -45,8 +50,8 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
     ax.set_zlim(z_min, z_max)
-    for i, x, y, z in zip(range(len(vx)), vx, vy, vz):
-        ax.scatter(x, y, z, label=i)
+    for i, x, y, z, e in zip(range(len(vx)), vx, vy, vz, ve):
+        ax.scatter(x, y, z, label=i, s=e*2)
     ax.set_title(f"Event {eid}: Layerclusters reco")
     if legend:
         ax.legend()
@@ -58,8 +63,30 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
     ax.set_xlabel("x (cm)")
     ax.set_ylabel("y (cm)")
     ax.set_zlabel("z (cm)")
-    for i, x, y, z in zip(range(len(svx)), svx, svy, svz):
-        ax.scatter(x, y, z, label=i)
+
+    # keep only the lowest multiplicity per vertex
+    plot_set = {}
+    for vi, vm in zip(svi, svm):
+        for i, m in zip(vi, vm):
+            if i in plot_set and plot_set[i] < m:
+                continue
+            plot_set[i] = m
+
+    for ti, tx, ty, tz, te, vi, vm in zip(range(len(svx)), svx, svy, svz, sve, svi, svm):
+        _tx = []
+        _ty = []
+        _tz = []
+        _te = []
+        for x, y, z, e, i, m in zip(tx, ty, tz, te, vi, vm):
+            # do not replot points with higher multiplicity
+            if plot_set[i] != m:
+                continue
+            _tx.append(x)
+            _ty.append(y)
+            _tz.append(z)
+            _te.append(e)
+        ax.scatter(_tx, _ty, _tz, label=ti, s=np.array(_te)*2)
+
     ax.set_title(f"Event {eid}: Layerclusters sim")
     if legend:
         ax.legend()
