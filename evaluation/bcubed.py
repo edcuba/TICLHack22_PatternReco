@@ -5,7 +5,7 @@ def f_score(A, B):
     return (2 * A * B) / (A + B)
 
 
-def get_map(t_vertices, t_multiplicity):
+def get_map(t_vertices, t_multiplicity, f_min=0):
     """
     Create mapping of vertex_id to an array of tupples:
         (trackster_id, energy_fraction)
@@ -20,20 +20,23 @@ def get_map(t_vertices, t_multiplicity):
     i2te = {}
     for t_idx in range(len(t_vertices)):
         for i, m in zip(t_vertices[t_idx], t_multiplicity[t_idx]):
-            if i not in i2te:
-                i2te[i] = []
-            i2te[i].append((t_idx, 1. / m))
+            f = 1. / m
+            if f > f_min:
+                if i not in i2te:
+                    i2te[i] = []
+                i2te[i].append((t_idx, f))
     return i2te
 
 
-def get_E_map(t_vertices, t_energy):
+def get_E_map(t_vertices, t_energy, t_multi):
     """
     Create mapping if vertex id to the total vertex energy
     """
     v2e = {}
     for t_idx in range(len(t_vertices)):
-        for i, e in zip(t_vertices[t_idx], t_energy[t_idx]):
-            v2e[i] = e
+        v2e[t_idx] = {}
+        for i, e, m in zip(t_vertices[t_idx], t_energy[t_idx], t_multi[t_idx]):
+            v2e[t_idx][i] = e / m
     return v2e
 
 
@@ -84,7 +87,7 @@ def get_pairwise_scores(i, V, i2t, te_map):
         pair_score = B(i, j, i2t)
         if te_map:
             # multiply the score by the pair energy
-            e_pair = te_map[i] * te_map[j]
+            e_pair = (te_map[i] * te_map[j])**2
             pair_score *= e_pair
             e_pairs += e_pair
         i_trackster_score += pair_score
@@ -116,15 +119,17 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
     # for all reco/sim vertices
     for i in vertices:
         # get all tracksters/simtracksters i is in
-        i_tracksters = i2a[i]
+        i_tracksters = i2a.get(i, [])
 
         # get score for each trackster/simtrackster i is in
         for i_trackster, _ in i_tracksters:
             # intersection required for recall (as the points are filtered)
             V = np.intersect1d(t_vertices[i_trackster], vertices)
 
+            te_map = e_map[i_trackster] if e_map else None
+
             # normalize by the number of tracksters and add to the outer P sum
-            P += get_pairwise_scores(i, V, i2b, e_map) / len(i_tracksters)
+            P += get_pairwise_scores(i, V, i2b, te_map) / len(i_tracksters)
 
     # normalize the result
     return P / len(vertices)
