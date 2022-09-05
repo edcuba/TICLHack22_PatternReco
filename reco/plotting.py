@@ -22,6 +22,11 @@ def get_bounding_box(tracksters, simtracksters, eid):
 
     return x_max, x_min, y_max, y_min, z_max, z_min
 
+
+def plot_trackster(ax, label, x, y, z, e):
+    ax.scatter(x, y, z, label=label, s=np.array(e)*2)
+
+
 def plot_event(tracksters, simtracksters, eid, legend=True):
     """
     Plot Reco and Sim tracksters in the event
@@ -51,7 +56,8 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
     ax.set_ylim(y_min, y_max)
     ax.set_zlim(z_min, z_max)
     for i, x, y, z, e in zip(range(len(vx)), vx, vy, vz, ve):
-        ax.scatter(x, y, z, label=i, s=e*2)
+        plot_trackster(ax, i, x, y, z, e)
+
     ax.set_title(f"Event {eid}: Layerclusters reco")
     if legend:
         ax.legend()
@@ -85,7 +91,7 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
             _ty.append(y)
             _tz.append(z)
             _te.append(e)
-        ax.scatter(_tx, _ty, _tz, label=ti, s=np.array(_te)*2)
+        plot_trackster(ax, ti, _tx, _ty, _tz, _te)
 
     ax.set_title(f"Event {eid}: Layerclusters sim")
     if legend:

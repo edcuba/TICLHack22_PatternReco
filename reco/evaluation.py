@@ -5,41 +5,6 @@ def f_score(A, B):
     return (2 * A * B) / (A + B)
 
 
-def get_map(t_vertices, t_multiplicity, f_min=0):
-    """
-    Create mapping of vertex_id to an array of tupples:
-        (trackster_id, energy_fraction)
-
-    Input:
-        t_vertices: array of vertex IDs in dimensions (tracksters, vertices)
-        t_multiplicity: array of vertex multiplicities in dims (tracksters, vertices)
-
-    Output:
-        {vertex: [(trackster_id, energy_fraction)]}
-    """
-    i2te = {}
-    for t_idx in range(len(t_vertices)):
-        for i, m in zip(t_vertices[t_idx], t_multiplicity[t_idx]):
-            f = 1. / m
-            if f > f_min:
-                if i not in i2te:
-                    i2te[i] = []
-                i2te[i].append((t_idx, f))
-    return i2te
-
-
-def get_E_map(t_vertices, t_energy, t_multi):
-    """
-    Create mapping if vertex id to the total vertex energy
-    """
-    v2e = {}
-    for t_idx in range(len(t_vertices)):
-        v2e[t_idx] = {}
-        for i, e, m in zip(t_vertices[t_idx], t_energy[t_idx], t_multi[t_idx]):
-            v2e[t_idx][i] = e / m
-    return v2e
-
-
 def B(i, j, mapping):
     """
     i and j are in the same trackster on one side
