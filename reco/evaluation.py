@@ -1,4 +1,8 @@
 import numpy as np
+import awkward as ak
+
+from .energy import get_energy_map
+from .event import get_trackster_map
 
 
 def f_score(A, B):
@@ -98,3 +102,21 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
 
     # normalize the result
     return P / len(vertices)
+
+
+def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, noise=True):
+    t_vertices = ak.flatten(t_indexes)
+    st_vertices = ak.flatten(st_indexes) if noise else t_vertices
+
+    # precompute LC -> Trackster mapping
+    i2rt = get_trackster_map(t_indexes, v_multi)
+    i2st = get_trackster_map(st_indexes, sv_multi, f_min=f_min)
+
+    # precompute LC -> Energy mapping (same for all tracksters the LC is in)
+    te_map = get_energy_map(t_indexes, t_energy, v_multi)
+    ste_map = get_energy_map(st_indexes, st_energy, sv_multi)
+
+    precision = bcubed(t_vertices, t_indexes, i2rt, i2st, e_map=te_map)
+    recall = bcubed(st_vertices, st_indexes, i2st, i2rt, e_map=ste_map)
+
+    return precision, recall, f_score(precision, recall)

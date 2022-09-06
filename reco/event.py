@@ -1,3 +1,6 @@
+import awkward as ak
+
+
 def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
     """
     Create mapping of vertex_id to an array of tupples:
@@ -19,3 +22,16 @@ def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
                     i2te[i] = []
                 i2te[i].append((t_idx, f))
     return i2te
+
+
+def remap_array_by_label(array, labels):
+    h = max(labels) + 1
+    rm = []
+
+    for i in range(h):
+        rm.append([])
+
+    for l, i in zip(labels, array):
+        rm[l] += list(i)
+
+    return ak.Array(rm)

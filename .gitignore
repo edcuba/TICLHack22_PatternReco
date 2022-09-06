@@ -4,3 +4,4 @@ ve
 .DS_Store
 data
 figures
+__pycache__

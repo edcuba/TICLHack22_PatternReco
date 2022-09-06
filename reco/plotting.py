@@ -27,6 +27,14 @@ def plot_trackster(ax, label, x, y, z, e):
     ax.scatter(x, y, z, label=label, s=np.array(e)*2)
 
 
+def plot_tracksters(ax, vx, vy, vz, ve):
+    ax.set_xlabel("x (cm)")
+    ax.set_ylabel("y (cm)")
+    ax.set_zlabel("z (cm)")
+    for i, x, y, z, e in zip(range(len(vx)), vx, vy, vz, ve):
+        plot_trackster(ax, i, x, y, z, e)
+
+
 def plot_event(tracksters, simtracksters, eid, legend=True):
     """
     Plot Reco and Sim tracksters in the event
@@ -49,14 +57,10 @@ def plot_event(tracksters, simtracksters, eid, legend=True):
     fig = plt.figure(figsize=(12, 10))
 
     ax = fig.add_subplot(121, projection='3d')
-    ax.set_xlabel("x (cm)")
-    ax.set_ylabel("y (cm)")
-    ax.set_zlabel("z (cm)")
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min, y_max)
     ax.set_zlim(z_min, z_max)
-    for i, x, y, z, e in zip(range(len(vx)), vx, vy, vz, ve):
-        plot_trackster(ax, i, x, y, z, e)
+    plot_tracksters(ax, vx, vy, vz, ve)
 
     ax.set_title(f"Event {eid}: Layerclusters reco")
     if legend:
