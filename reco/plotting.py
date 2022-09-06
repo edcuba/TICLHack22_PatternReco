@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
+from .event import remap_array_by_label
+
 
 def get_bounding_box(tracksters, simtracksters, eid):
     # get the trackster barycenters for event eid
@@ -147,3 +149,14 @@ def plot_graph_3D(G, color, ax=None, edges=True):
 
                 # Plot the connecting lines
                 ax.plot(x, y, z, c='black', alpha=0.5)
+
+
+def plot_remapped(tracksters, eid, labels):
+    rx = remap_array_by_label(tracksters["vertices_x"].array()[eid], labels)
+    ry = remap_array_by_label(tracksters["vertices_y"].array()[eid], labels)
+    rz = remap_array_by_label(tracksters["vertices_z"].array()[eid], labels)
+    re = remap_array_by_label(tracksters["vertices_energy"].array()[eid], labels)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    plot_tracksters(ax, rx, ry, rz, re)
+    plt.show()
