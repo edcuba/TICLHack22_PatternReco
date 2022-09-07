@@ -32,7 +32,8 @@ def remap_arrays_by_label(array, labels):
         rm.append([])
 
     for l, i in zip(labels, array):
-        rm[l] += list(i)
+        if l >= 0:
+            rm[l] += list(i)
 
     return ak.Array(rm)
 
@@ -44,6 +45,7 @@ def remap_items_by_label(array, labels):
         rm.append([])
 
     for l, i in zip(labels, array):
-        rm[l].append(i)
+        if l >= 0:
+            rm[l].append(i)
 
     return ak.Array(rm)
