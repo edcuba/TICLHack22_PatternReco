@@ -24,7 +24,7 @@ def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
     return i2te
 
 
-def remap_array_by_label(array, labels):
+def remap_arrays_by_label(array, labels):
     h = max(labels) + 1
     rm = []
 
@@ -33,5 +33,17 @@ def remap_array_by_label(array, labels):
 
     for l, i in zip(labels, array):
         rm[l] += list(i)
+
+    return ak.Array(rm)
+
+def remap_items_by_label(array, labels):
+    h = max(labels) + 1
+    rm = []
+
+    for i in range(h):
+        rm.append([])
+
+    for l, i in zip(labels, array):
+        rm[l].append(i)
 
     return ak.Array(rm)
