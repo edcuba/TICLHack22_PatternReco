@@ -2,7 +2,7 @@ import numpy as np
 import awkward as ak
 
 from .energy import get_energy_map
-from .event import get_trackster_map
+from .event import get_trackster_map, remap_arrays_by_label
 
 
 def f_score(A, B):
@@ -120,3 +120,11 @@ def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_mi
     recall = bcubed(st_vertices, st_indexes, i2st, i2rt, e_map=ste_map)
 
     return precision, recall, f_score(precision, recall)
+
+
+def evaluate_remapped(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, labels, f_min=0, noise=True):
+    ri = remap_arrays_by_label(t_indexes, labels)
+    re = remap_arrays_by_label(t_energy, labels)
+    rm = remap_arrays_by_label(v_multi, labels)
+    precision, recall, fscore = evaluate(ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min, noise=noise)
+    print(f"Precision: {precision:.2f}, Recall: {recall:.2f}, F-score: {fscore:.2f}")
