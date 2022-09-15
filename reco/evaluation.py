@@ -126,5 +126,36 @@ def evaluate_remapped(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_mu
     ri = remap_arrays_by_label(t_indexes, labels)
     re = remap_arrays_by_label(t_energy, labels)
     rm = remap_arrays_by_label(v_multi, labels)
-    precision, recall, fscore = evaluate(ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min, noise=noise)
-    print(f"Precision: {precision:.2f}, Recall: {recall:.2f}, F-score: {fscore:.2f}")
+    return evaluate(ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min, noise=noise)
+
+
+def run_evaluation(callable_fn, tracksters, simtracksters, **kwargs):
+    t_indexes = tracksters["vertices_indexes"].array()
+    t_energy = tracksters["vertices_energy"].array()
+    tv_multi = tracksters["vertices_multiplicity"].array()
+    st_indexes = simtracksters["stsSC_vertices_indexes"].array()
+    st_energy = simtracksters["stsSC_vertices_energy"].array()
+    stv_multi = simtracksters["stsSC_vertices_multiplicity"].array()
+
+    mP = []
+    mR = []
+    mF = []
+
+    for _eid in range(len(t_indexes)):
+        labels = callable_fn(tracksters, _eid, **kwargs)
+        P, R, F = evaluate_remapped(
+            t_indexes[_eid],
+            st_indexes[_eid],
+            t_energy[_eid],
+            st_energy[_eid],
+            tv_multi[_eid],
+            stv_multi[_eid],
+            labels,
+            noise=False
+        )
+        mP.append(P)
+        mR.append(R)
+        mF.append(F)
+        print(f"Event {_eid}: T_reco: {max(labels)-1}, T_sim: 10 | p: {P:.2f} r: {R:.2f} f:{F:.2f}")
+
+    print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")
