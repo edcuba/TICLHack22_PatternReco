@@ -156,6 +156,6 @@ def run_evaluation(callable_fn, tracksters, simtracksters, **kwargs):
         mP.append(P)
         mR.append(R)
         mF.append(F)
-        print(f"Event {_eid}: T_reco: {max(labels)-1}, T_sim: 10 | p: {P:.2f} r: {R:.2f} f:{F:.2f}")
+        print(f"Event {_eid}: T_reco: {max(labels)+1}, T_sim: 10 | p: {P:.2f} r: {R:.2f} f:{F:.2f}")
 
     print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")

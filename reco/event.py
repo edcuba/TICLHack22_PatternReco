@@ -1,4 +1,23 @@
+import numpy as np
 import awkward as ak
+
+
+def get_bary(tracksters, _eid):
+    return np.array([
+        tracksters["barycenter_x"].array()[_eid],
+        tracksters["barycenter_y"].array()[_eid],
+        tracksters["barycenter_z"].array()[_eid]
+    ]).T
+
+
+def get_lc(tracksters, _eid):
+    # this is not an entirely fair comparison:
+    # the LC level methods should use sim LCs not only the CLUE3D ones
+    # using sim data here is possible, but gets complicated
+    x_lc = ak.flatten(tracksters["vertices_x"].array()[_eid])
+    y_lc = ak.flatten(tracksters["vertices_y"].array()[_eid])
+    z_lc = ak.flatten(tracksters["vertices_z"].array()[_eid])
+    return np.array([x_lc, y_lc, z_lc]).T
 
 
 def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
