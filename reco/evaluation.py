@@ -3,6 +3,7 @@ import awkward as ak
 
 from .energy import get_energy_map
 from .event import get_trackster_map, remap_arrays_by_label
+from .dataset import get_ground_truth
 
 
 def f_score(A, B):
@@ -129,13 +130,12 @@ def evaluate_remapped(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_mu
     return evaluate(ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min, noise=noise)
 
 
-def run_evaluation(callable_fn, tracksters, simtracksters, **kwargs):
+def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwargs):
     t_indexes = tracksters["vertices_indexes"].array()
     t_energy = tracksters["vertices_energy"].array()
     tv_multi = tracksters["vertices_multiplicity"].array()
-    st_indexes = simtracksters["stsSC_vertices_indexes"].array()
-    st_energy = simtracksters["stsSC_vertices_energy"].array()
-    stv_multi = simtracksters["stsSC_vertices_multiplicity"].array()
+
+    sv_i = simtracksters["stsSC_vertices_indexes"].array()
 
     mP = []
     mR = []
@@ -143,19 +143,33 @@ def run_evaluation(callable_fn, tracksters, simtracksters, **kwargs):
 
     for _eid in range(len(t_indexes)):
         labels = callable_fn(tracksters, _eid, **kwargs)
+
+        gt = get_ground_truth(
+            tracksters,
+            simtracksters,
+            associations,
+            _eid,
+        )
+
+        gt_i = gt["vertices_indexes"]
+
         P, R, F = evaluate_remapped(
             t_indexes[_eid],
-            st_indexes[_eid],
+            gt_i,
             t_energy[_eid],
-            st_energy[_eid],
+            gt["vertices_energy"],
             tv_multi[_eid],
-            stv_multi[_eid],
+            gt["vertices_multiplicity"],
             labels,
             noise=False
         )
         mP.append(P)
         mR.append(R)
         mF.append(F)
-        print(f"Event {_eid}: T_reco: {max(labels)+1}, T_sim: 10 | p: {P:.2f} r: {R:.2f} f:{F:.2f}")
+        NIn = len(t_indexes[_eid])
+        NSim = len(sv_i[_eid])
+        NGt = len(gt_i)
+        NReco = max(labels) + 1
+        print(f"E{_eid}: nTIn: {NIn}\tnTSim: {NSim}\tnTGt: {NGt}\tnTReco: {NReco}\tP: {P:.2f} R: {R:.2f} F:{F:.2f}")
 
     print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")

@@ -44,6 +44,7 @@ def get_eid_splits(tracksters, simtracksters, associations, match_threshold=0.2)
 
 
 def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associations, eid):
+    # returns fraction of simtrackster the reco trackster makes up
     num_rec_t = tracksters["NTracksters"].array()[eid]
 
     # get the raw energy of reco and sim tracksters
@@ -66,6 +67,35 @@ def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associa
             fraction = sh_e / st_e
             # rt_e = raw_energy[rt_i]
             # print(f"\tshared energy with {rt_i} ({rt_e:.4f}): {sh_e:.4f} / {st_e:.4f} = {fraction:.4f}")
+            if fraction > reco_fr[rt_i]:
+                reco_fr[rt_i] = fraction
+                reco_st[rt_i] = st_i
+
+    return reco_fr, reco_st
+
+
+def match_best_simtrackster(tracksters, associations, eid):
+    """
+        returns fraction of recotrackster belonging to the simtrackster
+    """
+    num_rec_t = tracksters["NTracksters"].array()[eid]
+
+    # get the raw energy of reco and sim tracksters
+    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
+
+    # get the shared energy mapping
+    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+
+    # keep the highest fraction
+    reco_fr = [0] * num_rec_t
+    reco_st = [-1] * num_rec_t
+
+    # for each trackster, get the simtrackster with the highest energy fraction
+    for st_i, reco_indexes, shared_energies in zip(range(len(s2ri)), s2ri, s2r_SE):
+        for rt_i, sh_e in zip(reco_indexes, shared_energies):
+            rt_e = raw_energy[rt_i]
+            fraction = sh_e / rt_e
             if fraction > reco_fr[rt_i]:
                 reco_fr[rt_i] = fraction
                 reco_st[rt_i] = st_i
