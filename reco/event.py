@@ -2,6 +2,16 @@ import numpy as np
 import awkward as ak
 
 
+ARRAYS = [
+    "vertices_x",
+    "vertices_y",
+    "vertices_z",
+    "vertices_energy",
+    "vertices_multiplicity",
+    "vertices_indexes"
+]
+
+
 def get_bary(tracksters, _eid):
     return np.array([
         tracksters["barycenter_x"].array()[_eid],
@@ -68,3 +78,41 @@ def remap_items_by_label(array, labels):
             rm[l].append(i)
 
     return ak.Array(rm)
+
+
+def remap_tracksters(tracksters, new_mapping, eid):
+    """
+        provide a mapping in format (source: target)
+    """
+
+    raw_e = tracksters["raw_energy"].array()[eid]
+    new_idx_map = {}
+    new_tracksters = []
+
+    for tr_id in range(len(raw_e)):
+        # only keep the tracksters that are not going to be merged
+        if tr_id in new_mapping.keys():
+            # small trackster, ignore
+            continue
+
+        # create the new entry
+        new_tracksters.append([tr_id])
+        new_idx_map[tr_id] = len(new_tracksters) - 1
+
+    # now fill in the tracksters to be merged
+    for little, big in new_mapping.items():
+        new_big_idx = new_idx_map[big]
+        new_tracksters[new_big_idx].append(little)
+
+    result = {
+        k: ak.Array([ak.flatten(tracksters[k].array()[eid][tlist]) for tlist in new_tracksters])
+        for k in ARRAYS
+    }
+
+    # recompute barycentres
+    tve = result["vertices_energy"]
+    for coord in ("x", "y", "z"):
+        _bary = [np.average(vx, weights=ve) for vx, ve in zip(result[f"vertices_{coord}"], tve)]
+        result[f"barycenter_{coord}"] = ak.Array(_bary)
+
+    return result
