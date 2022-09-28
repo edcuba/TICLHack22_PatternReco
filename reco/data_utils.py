@@ -2,60 +2,38 @@ import uproot
 import random
 import torch
 import numpy as np
-from os import walk
+from os import walk, path
 
-from torch_geometric.data import Data
-from torch_geometric.data import InMemoryDataset
-from .graph_utils import load_tree, load_pairs
+from torch.utils.data import Dataset
+
 from .distance import euclidian_distance
 from .dataset import match_trackster_pairs
 
+class TracksterPairs(Dataset):
 
-class HGCALTracksters(InMemoryDataset):
+    def __init__(
+            self,
+            root_dir,
+            transform=None,
+            N_FILES=10,
+            MAX_DISTANCE=10,
+            ENERGY_THRESHOLD=10,
+        ):
+        self.N_FILES = N_FILES
+        self.MAX_DISTANCE = MAX_DISTANCE
+        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
 
-    def __init__(self, root, kind="photon", transform=None, pre_transform=None, pre_filter=None):
-        super().__init__(root, transform, pre_transform, pre_filter)
+        self.root_dir = root_dir
+        self.transform = transform
 
-        if kind == "photon":
-            self.data, self.slices = torch.load(self.processed_paths[0])
-        elif kind == "pion":
-            self.data, self.slices = torch.load(self.processed_paths[1])
-        else:
-            raise RuntimeError("kind should be in ['pion', 'photon']")
+        fn = self.processed_paths[0]
 
-    @property
-    def raw_file_names(self):
-        return ['trackster_tags_10ke_photon.root', 'trackster_tags_10ke_pion.root']
+        if not path.exists(fn):
+            self.process()
 
-    @property
-    def processed_file_names(self):
-        return ['tags_photon.pt', 'tags_pion.pt']
-
-    def process(self):
-        for source, target in zip(self.raw_file_names, self.processed_paths):
-            print(f"Processing: {source}")
-            path = f"{self.root}/{source}"
-            tracksters = uproot.open({path: "tracksters"})
-
-            dataset = []
-            for g, label, te in load_tree(tracksters, N=2):
-                x = torch.tensor([pos for _, pos in g.nodes("pos")])
-                edge_index = torch.tensor(list(g.edges())).T
-                y = torch.tensor(label)
-                dataset.append(Data(x, edge_index=edge_index, y=y, energy=torch.tensor(te)))
-
-            data, slices = self.collate(dataset)
-            torch.save((data, slices), target)
-
-
-class TracksterPairs(InMemoryDataset):
-
-    USE_FILES = 10
-    MAX_DISTANCE = 10
-
-    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
-        super().__init__(root, transform, pre_transform, pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        dx, dy = torch.load(fn)
+        self.x = torch.tensor(dx).type(torch.float)
+        self.y = torch.tensor(dy).type(torch.float)
 
     @property
     def raw_file_names(self):
@@ -65,20 +43,33 @@ class TracksterPairs(InMemoryDataset):
             files.extend(filenames)
             break
         full_paths = list([data_path + f for f in files])
-        return full_paths[:self.USE_FILES]
+        return full_paths[:self.N_FILES]
 
     @property
     def processed_file_names(self):
-        return list([f'pairs_{i}.pt' for i in range(self.USE_FILES)])
+        return list([f"pairs_10p_{self.N_FILES}f_d{self.MAX_DISTANCE}_e{self.ENERGY_THRESHOLD}.pt"])
+
+    @property
+    def processed_paths(self):
+        return [path.join(self.root_dir, "processed", fn) for fn in self.processed_file_names]
 
     def build_tensor(self, edge, *args):
         a, b = edge
         fa = [f[a] for f in args]
         fb = [f[b] for f in args]
-        return torch.tensor(fa + fb)
+        return fa + fb
 
     def process(self):
-        for source, target in zip(self.raw_file_names, self.processed_paths):
+        """
+            for now, the dataset fits into the memory
+            store in one file and load at once
+
+            if needed, store in multiple files (processed file names)
+            and implement a get method
+        """
+        dataset_X = []
+        dataset_Y = []
+        for source in self.raw_file_names:
             print(f"Processing: {source}")
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
@@ -86,7 +77,6 @@ class TracksterPairs(InMemoryDataset):
             associations = uproot.open({source: "ticlNtuplizer/associations"})
             graph = uproot.open({source: "ticlNtuplizer/graph"})
 
-            dataset = []
 
             for eid in range(len(tracksters["vertices_x"].array())):
 
@@ -110,6 +100,7 @@ class TracksterPairs(InMemoryDataset):
                     simtracksters,
                     associations,
                     eid,
+                    energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
                 )
 
@@ -131,69 +122,20 @@ class TracksterPairs(InMemoryDataset):
                 re = tracksters["raw_energy"].array()[eid]
 
                 for edge in positive:
-                    X = self.build_tensor(edge, bx, by, bz, re)
-                    dataset.append(Data(
-                        X.type(torch.float).reshape(1, -1),
-                        y=torch.tensor(1),
-                    ))
+                    dataset_X.append(self.build_tensor(edge, bx, by, bz, re))
+                    dataset_Y.append(1)
 
                 for edge in negative:
-                    X = self.build_tensor(edge, bx, by, bz, re)
-                    dataset.append(Data(
-                        X.type(torch.float).reshape(1, -1),
-                        y=torch.tensor(0),
-                    ))
+                    dataset_X.append(self.build_tensor(edge, bx, by, bz, re))
+                    dataset_Y.append(0)
 
-            data, slices = self.collate(dataset)
-            torch.save((data, slices), target)
+        torch.save((dataset_X, dataset_Y), self.processed_paths[0])
 
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
 
-class HGCALTracksterPairs(InMemoryDataset):
+    def __len__(self):
+        return len(self.y)
 
-    def __init__(self, root, kind="photon", transform=None, pre_transform=None, pre_filter=None):
-        super().__init__(root, transform, pre_transform, pre_filter)
-
-        if kind == "photon":
-            self.data, self.slices = torch.load(self.processed_paths[0])
-        elif kind == "pion":
-            self.data, self.slices = torch.load(self.processed_paths[1])
-        else:
-            raise RuntimeError("kind should be in ['pion', 'photon']")
-
-    @property
-    def raw_file_names(self):
-        return ['trackster_pairs_10ke_photon.root', 'trackster_pairs_10ke_pion.root']
-
-    @property
-    def processed_file_names(self):
-        return ['pairs_photon.pt', 'pairs_pion.pt']
-
-    def process(self):
-        for source, target in zip(self.raw_file_names, self.processed_paths):
-            print(f"Processing: {source}")
-            path = f"{self.root}/{source}"
-            pairs = uproot.open({path: "tracksters"})
-
-            dataset = []
-            for t, c, pl, pe, pf in load_pairs(pairs, N=2):
-                # join both graphs into a single entry
-                # and only add edges within the graphs
-                x = torch.tensor(
-                    list([pos for _, pos in t.nodes("pos")]) + list([pos for _, pos in c.nodes("pos")])
-                )
-                energy = torch.tensor(
-                    list([e for _, e in t.nodes("energy")]) + list([e for _, e in c.nodes("energy")])
-                )
-
-                tlen = len(t.nodes())
-
-                # offset the edges of the candidate graph
-                edge_index = torch.tensor(
-                    list(t.edges()) + list([(v0 + tlen, v1 + tlen) for v0, v1 in c.edges()])
-                ).T
-
-                y = torch.tensor(pl)
-                dataset.append(Data(x, edge_index=edge_index, energy=energy, y=y, event=pe, fileid=pf))
-
-            data, slices = self.collate(dataset)
-            torch.save((data, slices), target)
+    def __repr__(self):
+        return f"<TracksterPairs len={len(self)}>"
