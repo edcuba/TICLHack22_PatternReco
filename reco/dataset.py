@@ -5,6 +5,9 @@ import numpy as np
 from os import walk, path
 from torch.utils.data import Dataset
 
+
+from .graph_utils import create_graph
+from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
 from .event import get_bary, remap_tracksters
 from .matching import match_best_simtrackster
 from .distance import euclidian_distance
@@ -99,6 +102,7 @@ class TracksterPairs(Dataset):
             self,
             root_dir,
             transform=None,
+            balanced=False,
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
@@ -109,6 +113,7 @@ class TracksterPairs(Dataset):
 
         self.root_dir = root_dir
         self.transform = transform
+        self.balanced = balanced
 
         fn = self.processed_paths[0]
 
@@ -131,7 +136,8 @@ class TracksterPairs(Dataset):
 
     @property
     def processed_file_names(self):
-        return list([f"pairs_10p_{self.N_FILES}f_d{self.MAX_DISTANCE}_e{self.ENERGY_THRESHOLD}.pt"])
+        bal = "b" if self.balanced else "nb"
+        return list([f"pairs_10p_{self.N_FILES}f_d{self.MAX_DISTANCE}_e{self.ENERGY_THRESHOLD}_{bal}.pt"])
 
     @property
     def processed_paths(self):
@@ -167,6 +173,7 @@ class TracksterPairs(Dataset):
                 vx = tracksters["vertices_x"].array()[eid]
                 vy = tracksters["vertices_y"].array()[eid]
                 vz = tracksters["vertices_z"].array()[eid]
+                ve = tracksters["vertices_energy"].array()[eid]
                 clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
 
                 inners_list = graph["linked_inners"].array()[eid]
@@ -197,10 +204,14 @@ class TracksterPairs(Dataset):
                 matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
                 not_matches = c_pairs - matches
 
-                take = min(len(matches), len(not_matches))
-
-                positive = random.sample(list(not_matches), k=take)
-                negative = random.sample(list(not_matches), k=take)
+                if self.balanced:
+                    # crucial step to get right!
+                    take = min(len(matches), len(not_matches))
+                    positive = random.sample(list(matches), k=take)
+                    negative = random.sample(list(not_matches), k=take)
+                else:
+                    positive = matches
+                    negative = not_matches
 
                 bx = tracksters["barycenter_x"].array()[eid]
                 by = tracksters["barycenter_y"].array()[eid]
@@ -213,12 +224,21 @@ class TracksterPairs(Dataset):
                 evx = tracksters["eVector0_x"].array()[eid]     # x of principal component
                 evy = tracksters["eVector0_y"].array()[eid]     # y of principal component
                 evz = tracksters["eVector0_z"].array()[eid]     # z of principal component
+                sp1 = tracksters["sigmaPCA1"].array()[eid]      # error in the 1st principal axis
+                sp2 = tracksters["sigmaPCA2"].array()[eid]      # error in the 2nd principal axis
+                sp3 = tracksters["sigmaPCA3"].array()[eid]      # error in the 3rd principal axis
+
+                # this is pricey (and so are the graph features)
+                graphs = [create_graph(x, y, z, e, N=2) for x, y, z, e in zip(vx, vy, vz, ve)]
 
                 labels = ((positive, 1), (negative, 0))
                 for edges, label in labels:
                     for edge in edges:
+                        a, b = edge
+
                         # individual metrics
                         sample = self.build_tensor(
+                            # trackster metric
                             edge,
                             bx,
                             by,
@@ -231,8 +251,20 @@ class TracksterPairs(Dataset):
                             evx,
                             evy,
                             evz,
-                        ) + [   # pair metrics
-                            dst_map[(edge[0], edge[1])]
+                            sp1,
+                            sp2,
+                            sp3,
+                        ) + [
+                            # extra metrics
+                            longest_path_from_highest_centrality(graphs[a]),
+                            longest_path_from_highest_centrality(graphs[b]),
+                            mean_edge_energy_gap(graphs[a]),
+                            mean_edge_energy_gap(graphs[b]),
+                            mean_edge_length(graphs[a]),
+                            mean_edge_length(graphs[b]),
+                            len(ve[a]),
+                            len(ve[b]),
+                            dst_map[(a, b)]
                         ]
                         dataset_X.append(sample)
                         dataset_Y.append(label)
@@ -246,4 +278,10 @@ class TracksterPairs(Dataset):
         return len(self.y)
 
     def __repr__(self):
-        return f"<TracksterPairs len={len(self)}>"
+        infos = [
+            f"len={len(self)}",
+            f"balanced={self.balanced}",
+            f"max_distance={self.MAX_DISTANCE}",
+            f"energy_threshold={self.ENERGY_THRESHOLD}"
+        ]
+        return f"<TracksterPairs {' '.join(infos)}>"
