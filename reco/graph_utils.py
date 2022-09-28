@@ -61,3 +61,11 @@ def load_pairs(tree, N=2):
         t = create_graph(tx, ty, tz, te, N=N)
         c = create_graph(cx, cy, cz, ce, N=N)
         yield t, c, pl, pe, pf
+
+
+def get_graphs(tracksters, eid, N=2):
+    vx = tracksters["vertices_x"].array()[eid]
+    vy = tracksters["vertices_y"].array()[eid]
+    vz = tracksters["vertices_z"].array()[eid]
+    ve = tracksters["vertices_energy"].array()[eid]
+    return [create_graph(x, y, z, e, N=N) for x, y, z, e in zip(vx, vy, vz, ve)]

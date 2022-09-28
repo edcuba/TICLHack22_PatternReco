@@ -6,9 +6,9 @@ from os import walk, path
 from torch.utils.data import Dataset
 
 
-from .graph_utils import create_graph
+from .graph_utils import get_graphs
 from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
-from .event import get_bary, remap_tracksters
+from .event import get_bary, get_candidate_pairs, remap_tracksters
 from .matching import match_best_simtrackster
 from .distance import euclidian_distance
 
@@ -96,6 +96,64 @@ def get_ground_truth(
     return remap_tracksters(tracksters, merge_map, eid)
 
 
+def build_pair_tensor(edge, *args):
+    a, b = edge
+    fa = [f[a] for f in args]
+    fb = [f[b] for f in args]
+    return fa + fb
+
+
+def get_pair_tensor_builder(tracksters, eid, dst_map):
+    ve = tracksters["vertices_energy"].array()[eid]
+    bx = tracksters["barycenter_x"].array()[eid]
+    by = tracksters["barycenter_y"].array()[eid]
+    bz = tracksters["barycenter_z"].array()[eid]
+    re = tracksters["raw_energy"].array()[eid]      # total energy
+    reme = tracksters["raw_em_energy"].array()[eid] # electro-magnetic energy
+    ev1 = tracksters["EV1"].array()[eid]            # eigenvalues of 1st principal component
+    ev2 = tracksters["EV2"].array()[eid]            # eigenvalues of 2nd principal component
+    ev3 = tracksters["EV3"].array()[eid]            # eigenvalues of 3rd principal component
+    evx = tracksters["eVector0_x"].array()[eid]     # x of principal component
+    evy = tracksters["eVector0_y"].array()[eid]     # y of principal component
+    evz = tracksters["eVector0_z"].array()[eid]     # z of principal component
+    sp1 = tracksters["sigmaPCA1"].array()[eid]      # error in the 1st principal axis
+    sp2 = tracksters["sigmaPCA2"].array()[eid]      # error in the 2nd principal axis
+    sp3 = tracksters["sigmaPCA3"].array()[eid]      # error in the 3rd principal axis
+
+    # this is pricey (and so are the graph features)
+    graphs = get_graphs(tracksters, eid)
+
+    return lambda edge: build_pair_tensor(
+        edge,
+        bx,
+        by,
+        bz,
+        re,
+        reme,
+        ev1,
+        ev2,
+        ev3,
+        evx,
+        evy,
+        evz,
+        sp1,
+        sp2,
+        sp3,
+    ) + [
+        # extra metrics
+        longest_path_from_highest_centrality(graphs[edge[0]]),
+        longest_path_from_highest_centrality(graphs[edge[1]]),
+        mean_edge_energy_gap(graphs[edge[0]]),
+        mean_edge_energy_gap(graphs[edge[1]]),
+        mean_edge_length(graphs[edge[0]]),
+        mean_edge_length(graphs[edge[1]]),
+        len(ve[edge[0]]),
+        len(ve[edge[1]]),
+        dst_map[(edge[0], edge[1])]
+    ]
+
+
+
 class TracksterPairs(Dataset):
 
     def __init__(
@@ -143,12 +201,6 @@ class TracksterPairs(Dataset):
     def processed_paths(self):
         return [path.join(self.root_dir, "processed", fn) for fn in self.processed_file_names]
 
-    def build_tensor(self, edge, *args):
-        a, b = edge
-        fa = [f[a] for f in args]
-        fb = [f[b] for f in args]
-        return fa + fb
-
     def process(self):
         """
             for now, the dataset fits into the memory
@@ -167,26 +219,14 @@ class TracksterPairs(Dataset):
             associations = uproot.open({source: "ticlNtuplizer/associations"})
             graph = uproot.open({source: "ticlNtuplizer/graph"})
 
-
             for eid in range(len(tracksters["vertices_x"].array())):
 
-                vx = tracksters["vertices_x"].array()[eid]
-                vy = tracksters["vertices_y"].array()[eid]
-                vz = tracksters["vertices_z"].array()[eid]
-                ve = tracksters["vertices_energy"].array()[eid]
-                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-
-                inners_list = graph["linked_inners"].array()[eid]
-
-                candidate_pairs = []
-                dst_map = {}
-
-                for i, inners in enumerate(inners_list):
-                    for inner in inners:
-                        dst = euclidian_distance(clouds[i], clouds[inner])
-                        if dst <= self.MAX_DISTANCE:
-                            candidate_pairs.append((i, inner))
-                            dst_map[(i, inner)] = dst
+                candidate_pairs, dst_map = get_candidate_pairs(
+                    tracksters,
+                    graph,
+                    eid,
+                    max_distance=self.MAX_DISTANCE
+                )
 
                 gt_pairs = match_trackster_pairs(
                     tracksters,
@@ -213,59 +253,12 @@ class TracksterPairs(Dataset):
                     positive = matches
                     negative = not_matches
 
-                bx = tracksters["barycenter_x"].array()[eid]
-                by = tracksters["barycenter_y"].array()[eid]
-                bz = tracksters["barycenter_z"].array()[eid]
-                re = tracksters["raw_energy"].array()[eid]      # total energy
-                reme = tracksters["raw_em_energy"].array()[eid] # electro-magnetic energy
-                ev1 = tracksters["EV1"].array()[eid]            # eigenvalues of 1st principal component
-                ev2 = tracksters["EV2"].array()[eid]            # eigenvalues of 2nd principal component
-                ev3 = tracksters["EV3"].array()[eid]            # eigenvalues of 3rd principal component
-                evx = tracksters["eVector0_x"].array()[eid]     # x of principal component
-                evy = tracksters["eVector0_y"].array()[eid]     # y of principal component
-                evz = tracksters["eVector0_z"].array()[eid]     # z of principal component
-                sp1 = tracksters["sigmaPCA1"].array()[eid]      # error in the 1st principal axis
-                sp2 = tracksters["sigmaPCA2"].array()[eid]      # error in the 2nd principal axis
-                sp3 = tracksters["sigmaPCA3"].array()[eid]      # error in the 3rd principal axis
-
-                # this is pricey (and so are the graph features)
-                graphs = [create_graph(x, y, z, e, N=2) for x, y, z, e in zip(vx, vy, vz, ve)]
+                builder = get_pair_tensor_builder(tracksters, eid, dst_map)
 
                 labels = ((positive, 1), (negative, 0))
                 for edges, label in labels:
                     for edge in edges:
-                        a, b = edge
-
-                        # individual metrics
-                        sample = self.build_tensor(
-                            # trackster metric
-                            edge,
-                            bx,
-                            by,
-                            bz,
-                            re,
-                            reme,
-                            ev1,
-                            ev2,
-                            ev3,
-                            evx,
-                            evy,
-                            evz,
-                            sp1,
-                            sp2,
-                            sp3,
-                        ) + [
-                            # extra metrics
-                            longest_path_from_highest_centrality(graphs[a]),
-                            longest_path_from_highest_centrality(graphs[b]),
-                            mean_edge_energy_gap(graphs[a]),
-                            mean_edge_energy_gap(graphs[b]),
-                            mean_edge_length(graphs[a]),
-                            mean_edge_length(graphs[b]),
-                            len(ve[a]),
-                            len(ve[b]),
-                            dst_map[(a, b)]
-                        ]
+                        sample = builder(edge)
                         dataset_X.append(sample)
                         dataset_Y.append(label)
 

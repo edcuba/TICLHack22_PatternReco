@@ -1,5 +1,6 @@
 import numpy as np
 import awkward as ak
+from .distance import euclidian_distance
 
 
 ARRAYS = [
@@ -116,3 +117,24 @@ def remap_tracksters(tracksters, new_mapping, eid):
         result[f"barycenter_{coord}"] = ak.Array(_bary)
 
     return result
+
+
+def get_candidate_pairs(tracksters, graph, eid, max_distance=10):
+    vx = tracksters["vertices_x"].array()[eid]
+    vy = tracksters["vertices_y"].array()[eid]
+    vz = tracksters["vertices_z"].array()[eid]
+    clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+
+    inners_list = graph["linked_inners"].array()[eid]
+
+    candidate_pairs = []
+    dst_map = {}
+
+    for i, inners in enumerate(inners_list):
+        for inner in inners:
+            dst = euclidian_distance(clouds[i], clouds[inner])
+            if dst <= max_distance:
+                candidate_pairs.append((i, inner))
+                dst_map[(i, inner)] = dst
+
+    return candidate_pairs, dst_map
