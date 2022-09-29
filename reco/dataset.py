@@ -64,7 +64,8 @@ def match_trackster_pairs(
             dists = dst_func(tt_id, large_spt)
             m_dist = min(dists)
             if m_dist < distance_threshold:
-                pairs.append((tt_id, large_spt[np.argmin(dists)], m_dist))
+                # this must be an array, not a tuple, awkward doesn't like tuples
+                pairs.append([tt_id, large_spt[np.argmin(dists)], m_dist])
 
     return pairs
 
