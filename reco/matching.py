@@ -104,6 +104,37 @@ def match_best_simtrackster(tracksters, associations, eid):
 
 
 
+def find_good_pairs(tracksters, associations, pair_list, eid, confidence_threshold=0.5):
+    """
+        Take a pair list
+        Return pairs that are coming from the same particle
+    """
+
+    # get the raw energy of reco and sim tracksters
+    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
+
+    # get the shared energy mapping
+    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+
+    pair_set = set(pair_list)
+    good_pairs = []
+
+    for st_i, reco_indexes, shared_energies in zip(range(len(s2ri)), s2ri, s2r_SE):
+        for rt_i, sh_e in zip(reco_indexes, shared_energies):
+            rt_e = raw_energy[rt_i]
+            fraction = sh_e / rt_e
+            if fraction > confidence_threshold:
+                ab = (st_i, rt_i)
+                ba = (rt_i, st_i)
+                if ab in pair_set:
+                    good_pairs.append(ab)
+                elif ba in pair_set:
+                    good_pairs.append(ba)
+
+    return set(good_pairs)
+
+
 def split_on_shared_energy(tracksters, simtracksters, h_frac, event_eids, complete_threshold=0.5, histogram=False):
     """
     Compute complete and incomplete tracksters based on shared energy

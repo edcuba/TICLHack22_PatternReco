@@ -5,13 +5,12 @@ import numpy as np
 from os import walk, path
 from torch.utils.data import Dataset
 
-
-from .graph_utils import get_graphs
-from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
 from .event import get_bary, get_candidate_pairs, remap_tracksters
-from .matching import match_best_simtrackster
+from .matching import match_best_simtrackster, find_good_pairs
 from .distance import euclidian_distance
 
+# from .graph_utils import get_graphs
+#from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
 
 def _bary_func(bary):
     return lambda tt_id, large_spt: list([euclidian_distance([bary[tt_id]], [bary[lsp]]) for lsp in large_spt])
@@ -122,7 +121,7 @@ def get_pair_tensor_builder(tracksters, eid, dst_map):
     sp3 = tracksters["sigmaPCA3"].array()[eid]      # error in the 3rd principal axis
 
     # this is pricey (and so are the graph features)
-    graphs = get_graphs(tracksters, eid)
+    # graphs = get_graphs(tracksters, eid)
 
     return lambda edge: build_pair_tensor(
         edge,
@@ -141,13 +140,12 @@ def get_pair_tensor_builder(tracksters, eid, dst_map):
         sp2,
         sp3,
     ) + [
-        # extra metrics
-        longest_path_from_highest_centrality(graphs[edge[0]]),
-        longest_path_from_highest_centrality(graphs[edge[1]]),
-        mean_edge_energy_gap(graphs[edge[0]]),
-        mean_edge_energy_gap(graphs[edge[1]]),
-        mean_edge_length(graphs[edge[0]]),
-        mean_edge_length(graphs[edge[1]]),
+        # longest_path_from_highest_centrality(graphs[edge[0]]),
+        # longest_path_from_highest_centrality(graphs[edge[1]]),
+        # mean_edge_energy_gap(graphs[edge[0]]),
+        # mean_edge_energy_gap(graphs[edge[1]]),
+        # mean_edge_length(graphs[edge[0]]),
+        # mean_edge_length(graphs[edge[1]]),
         len(ve[edge[0]]),
         len(ve[edge[1]]),
         dst_map[(edge[0], edge[1])]
@@ -162,6 +160,7 @@ class TracksterPairs(Dataset):
             root_dir,
             transform=None,
             balanced=False,
+            include_neutral=True,
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
@@ -173,6 +172,7 @@ class TracksterPairs(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.balanced = balanced
+        self.include_neutral = include_neutral
 
         fn = self.processed_paths[0]
 
@@ -195,12 +195,19 @@ class TracksterPairs(Dataset):
 
     @property
     def processed_file_names(self):
-        bal = "b" if self.balanced else "nb"
-        return list([f"pairs_10p_{self.N_FILES}f_d{self.MAX_DISTANCE}_e{self.ENERGY_THRESHOLD}_{bal}.pt"])
+        infos = [
+            "10p",
+            f"{self.N_FILES}f",
+            f"d{self.MAX_DISTANCE}",
+            f"e{self.ENERGY_THRESHOLD}",
+            "bal" if self.balanced else "nbal",
+            "in" if self.include_neutral else "en",
+        ]
+        return list([f"pairs{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):
-        return [path.join(self.root_dir, "processed", fn) for fn in self.processed_file_names]
+        return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
 
     def process(self):
         """
@@ -244,19 +251,23 @@ class TracksterPairs(Dataset):
 
                 matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
                 not_matches = c_pairs - matches
+                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
 
                 if self.balanced:
                     # crucial step to get right!
-                    take = min(len(matches), len(not_matches))
+                    take = min(len(matches), len(not_matches) - len(neutral))
                     positive = random.sample(list(matches), k=take)
-                    negative = random.sample(list(not_matches), k=take)
+                    negative = random.sample(list(not_matches - neutral), k=take)
                 else:
                     positive = matches
-                    negative = not_matches
+                    negative = not_matches - neutral
 
                 builder = get_pair_tensor_builder(tracksters, eid, dst_map)
 
-                labels = ((positive, 1), (negative, 0))
+                labels = [(positive, 1), (negative, 0)]
+                if self.include_neutral:
+                    labels.append((neutral, 0.5))
+
                 for edges, label in labels:
                     for edge in edges:
                         sample = builder(edge)

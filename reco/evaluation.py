@@ -1,13 +1,19 @@
+import torch
 import numpy as np
 import awkward as ak
 
 from .energy import get_energy_map
-from .event import get_trackster_map, remap_arrays_by_label
-from .dataset import get_ground_truth
+from .dataset import get_ground_truth, get_pair_tensor_builder
+from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
 
 
-def f_score(A, B):
-    return (2 * A * B) / (A + B)
+
+def f_score(precision, recall, beta=1):
+    """
+        F-Beta score
+            when beta = 1, this is equal to F1 score
+    """
+    return ((1 + beta**2) * precision * recall) / ((precision * beta**2) + recall)
 
 
 def B(i, j, mapping):
@@ -105,7 +111,7 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
     return P / len(vertices)
 
 
-def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, noise=True):
+def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, beta=2, noise=True):
     t_vertices = ak.flatten(t_indexes)
     st_vertices = ak.flatten(st_indexes) if noise else t_vertices
 
@@ -120,7 +126,7 @@ def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_mi
     precision = bcubed(t_vertices, t_indexes, i2rt, i2st, e_map=te_map)
     recall = bcubed(st_vertices, st_indexes, i2st, i2rt, e_map=ste_map)
 
-    return precision, recall, f_score(precision, recall)
+    return precision, recall, f_score(precision, recall, beta=beta)
 
 
 def evaluate_remapped(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, labels, f_min=0, noise=True):
@@ -173,3 +179,108 @@ def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwarg
         print(f"E{_eid}: nTIn: {NIn}\tnTSim: {NSim}\tnTGt: {NGt}\tnTReco: {NReco}\tP: {P:.2f} R: {R:.2f} F:{F:.2f}")
 
     print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")
+
+
+def pairwise_model_evaluation(
+    tracksters,
+    simtracksters,
+    associations,
+    graphs,
+    model,
+    scaler,
+    decision_th,
+    max_distance=10,
+    energy_threshold=10,
+):
+    nt = tracksters["NTracksters"].array()
+
+    results = {
+        "clue3d_to_sim": [],
+        "target_to_sim": [],
+        "reco_to_target": [],
+        "reco_to_sim": []
+    }
+
+    for eid in range(len(nt)):
+        # get candidate pairs
+        candidate_pairs, dst_map = get_candidate_pairs(
+            tracksters,
+            graphs,
+            eid,
+            max_distance=max_distance,
+        )
+        builder = get_pair_tensor_builder(tracksters, eid, dst_map)
+
+        # get target
+        gt = get_ground_truth(
+            tracksters,
+            simtracksters,
+            associations,
+            eid,
+            distance_threshold=max_distance,
+            energy_threshold=energy_threshold,
+        )
+
+        # prepare features
+        _scaled_samples = []
+        for edge in candidate_pairs:
+            sample = torch.tensor(builder(edge))
+            scaled = scaler.transform(sample.reshape(1,-1))
+            _scaled_samples.append(scaled)
+        samples = torch.tensor(np.array(_scaled_samples)).type(torch.float)
+
+        # predict edges
+        model.eval()
+        preds = model(samples)
+        out = (preds.reshape(1,-1)[0].detach().numpy() > decision_th)
+
+        # map decisions
+        # !must be little -> big
+        # some tracksters happen to both on left and right here
+        re = tracksters["raw_energy"].array()[eid]
+        merge_map = {
+            a: b for (a, b), o in zip(candidate_pairs, out)
+            if o and re[a] < energy_threshold and re[b] > energy_threshold
+        }
+
+        # rebuild the event
+        reco = remap_tracksters(tracksters, merge_map, eid)
+
+        # reco
+        re = reco["vertices_energy"]
+        ri = reco["vertices_indexes"]
+        rm = reco["vertices_multiplicity"]
+
+        # target
+        te = gt["vertices_energy"]
+        ti = gt["vertices_indexes"]
+        tm = gt["vertices_multiplicity"]
+
+        # clue3D
+        ce = tracksters["vertices_energy"].array()[eid]
+        ci = tracksters["vertices_indexes"].array()[eid]
+        cm = tracksters["vertices_multiplicity"].array()[eid]
+
+        # simulation
+        se = simtracksters["stsSC_vertices_energy"].array()[eid]
+        si = simtracksters["stsSC_vertices_indexes"].array()[eid]
+        sm = simtracksters["stsSC_vertices_multiplicity"].array()[eid]
+
+        results["clue3d_to_sim"].append(evaluate(ci, si, ce, se, cm, sm, noise=False))
+        results["target_to_sim"].append(evaluate(ti, si, te, se, tm, sm, noise=False))
+        results["reco_to_target"].append(evaluate(ri, ti, re, te, rm, tm, noise=False))
+        results["reco_to_sim"].append(evaluate(ri, si, re, se, rm, sm, noise=False))
+
+        print(f"Event {eid}:")
+        for key, values in results.items():
+            vals = values[-1]
+            print(f"\t{key}:\tP: {vals[0]:.2f} R: {vals[1]:.2f} F: {vals[2]:.2f}")
+
+    print("----------")
+    for key, values in results.items():
+        avg_p = np.mean([x[0] for x in values])
+        avg_r = np.mean([x[1] for x in values])
+        avg_f = np.mean([x[2] for x in values])
+        print(f"mean {key}:\tP: {avg_p:.2f} R: {avg_r:.2f} F: {avg_f:.2f}")
+
+    return results
