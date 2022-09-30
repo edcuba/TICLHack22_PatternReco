@@ -135,7 +135,10 @@ def plot_graph_3D(G, color, ax=None, edges=True):
             yi.append(value[1])
             zi.append(value[2])
 
-        ax.scatter(xi, yi, zi, s=30, c=color)#, cmap='rainbow', s=20+20*G.degree(key), edgecolors='k', alpha=0.7)
+        if isinstance(color, str):
+            ax.scatter(xi, yi, zi, s=30, c=color)
+        else:
+            ax.scatter(xi, yi, zi, s=30, c=color, cmap='rainbow')
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted
@@ -146,7 +149,7 @@ def plot_graph_3D(G, color, ax=None, edges=True):
                 z = np.array((pos[j[0]][2], pos[j[1]][2]))
 
                 # Plot the connecting lines
-                ax.plot(x, y, z, c='black', alpha=0.5)
+                ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.5)
 
 
 def plot_remapped(tracksters, eid, labels):

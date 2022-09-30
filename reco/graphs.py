@@ -14,11 +14,11 @@ def distance_matrix(trk_x, trk_y, trk_z):
     return distance
 
 
-def create_graph(trk_x, trk_y, trk_z, trk_energy, N=1):
+def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index, N=1):
     distance = distance_matrix(trk_x, trk_y, trk_z)
     G = nx.Graph()
     for i in range(len(trk_energy)):
-        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i])
+        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i], index=trk_lc_index[i])
 
         # sort indices by distance
         idx_by_distance = np.argsort(distance[i])

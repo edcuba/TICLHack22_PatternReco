@@ -9,7 +9,7 @@ from .event import get_bary, get_candidate_pairs, remap_tracksters
 from .matching import match_best_simtrackster, find_good_pairs
 from .distance import euclidian_distance
 
-# from .graph_utils import get_graphs
+# from .graphs import get_graphs
 #from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
 
 def _bary_func(bary):
