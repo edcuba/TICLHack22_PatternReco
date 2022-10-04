@@ -158,6 +158,7 @@ class TracksterPairs(Dataset):
     def __init__(
             self,
             root_dir,
+            raw_data_path,
             transform=None,
             balanced=False,
             include_neutral=True,
@@ -168,6 +169,7 @@ class TracksterPairs(Dataset):
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE
         self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
+        self.raw_data_path = raw_data_path
 
         self.root_dir = root_dir
         self.transform = transform
@@ -185,12 +187,11 @@ class TracksterPairs(Dataset):
 
     @property
     def raw_file_names(self):
-        data_path = "/Users/ecuba/data/multiparticle_complet/"
         files = []
-        for (_, _, filenames) in walk(data_path):
+        for (_, _, filenames) in walk(self.raw_data_path):
             files.extend(filenames)
             break
-        full_paths = list([data_path + f for f in files])
+        full_paths = list([self.raw_data_path + f for f in files])
         return full_paths[:self.N_FILES]
 
     @property
