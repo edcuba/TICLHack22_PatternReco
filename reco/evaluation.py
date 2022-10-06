@@ -193,6 +193,7 @@ def pairwise_model_evaluation(
     energy_threshold=10,
 ):
     nt = tracksters["NTracksters"].array()
+    model.eval()
 
     results = {
         "clue3d_to_sim": [],
@@ -230,7 +231,6 @@ def pairwise_model_evaluation(
         samples = torch.tensor(np.array(_scaled_samples)).type(torch.float)
 
         # predict edges
-        model.eval()
         preds = model(samples)
         out = (preds.reshape(1,-1)[0].detach().numpy() > decision_th)
 
