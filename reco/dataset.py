@@ -157,6 +157,7 @@ class TracksterPairs(Dataset):
 
     def __init__(
             self,
+            name,
             root_dir,
             raw_data_path,
             transform=None,
@@ -166,6 +167,7 @@ class TracksterPairs(Dataset):
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
         ):
+        self.name = name
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE
         self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
@@ -197,7 +199,7 @@ class TracksterPairs(Dataset):
     @property
     def processed_file_names(self):
         infos = [
-            "10p",
+            self.name,
             f"{self.N_FILES}f",
             f"d{self.MAX_DISTANCE}",
             f"e{self.ENERGY_THRESHOLD}",

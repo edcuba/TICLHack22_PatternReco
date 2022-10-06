@@ -150,6 +150,7 @@ def plot_graph_3D(G, color, ax=None, edges=True):
 
                 # Plot the connecting lines
                 ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.5)
+        plt.show()
 
 
 def plot_remapped(tracksters, eid, labels):
