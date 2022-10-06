@@ -9,8 +9,28 @@ from .event import get_bary, get_candidate_pairs, remap_tracksters
 from .matching import match_best_simtrackster, find_good_pairs
 from .distance import euclidian_distance
 
-# from .graphs import get_graphs
-#from .features import longest_path_from_highest_centrality, mean_edge_length, mean_edge_energy_gap
+from .graphs import get_graphs
+from .features import get_graph_level_features
+
+
+FEATURE_KEYS = [
+    "barycenter_x",
+    "barycenter_y",
+    "barycenter_z",
+    "raw_energy",       # total energy
+    "raw_em_energy",    # electro-magnetic energy
+    "EV1",              # eigenvalues of 1st principal component
+    "EV2",
+    "EV3",
+    "eVector0_x",       # x of principal component
+    "eVector0_y",
+    "eVector0_z",
+    "sigmaPCA1",        # error in the 1st principal axis
+    "sigmaPCA2",
+    "sigmaPCA3",
+]
+
+
 
 def _bary_func(bary):
     return lambda tt_id, large_spt: list([euclidian_distance([bary[tt_id]], [bary[lsp]]) for lsp in large_spt])
@@ -96,61 +116,34 @@ def get_ground_truth(
     return remap_tracksters(tracksters, merge_map, eid)
 
 
-def build_pair_tensor(edge, *args):
+def build_pair_tensor(edge, features):
     a, b = edge
-    fa = [f[a] for f in args]
-    fb = [f[b] for f in args]
+    fa = [f[a] for f in features]
+    fb = [f[b] for f in features]
     return fa + fb
 
 
 def get_pair_tensor_builder(tracksters, eid, dst_map):
-    ve = tracksters["vertices_energy"].array()[eid]
-    bx = tracksters["barycenter_x"].array()[eid]
-    by = tracksters["barycenter_y"].array()[eid]
-    bz = tracksters["barycenter_z"].array()[eid]
-    re = tracksters["raw_energy"].array()[eid]      # total energy
-    reme = tracksters["raw_em_energy"].array()[eid] # electro-magnetic energy
-    ev1 = tracksters["EV1"].array()[eid]            # eigenvalues of 1st principal component
-    ev2 = tracksters["EV2"].array()[eid]            # eigenvalues of 2nd principal component
-    ev3 = tracksters["EV3"].array()[eid]            # eigenvalues of 3rd principal component
-    evx = tracksters["eVector0_x"].array()[eid]     # x of principal component
-    evy = tracksters["eVector0_y"].array()[eid]     # y of principal component
-    evz = tracksters["eVector0_z"].array()[eid]     # z of principal component
-    sp1 = tracksters["sigmaPCA1"].array()[eid]      # error in the 1st principal axis
-    sp2 = tracksters["sigmaPCA2"].array()[eid]      # error in the 2nd principal axis
-    sp3 = tracksters["sigmaPCA3"].array()[eid]      # error in the 3rd principal axis
+
+    # extract all trackster features
+    trackster_features = list([
+        tracksters[k].array()[eid] for k in FEATURE_KEYS
+    ])
 
     # this is pricey (and so are the graph features)
-    # graphs = get_graphs(tracksters, eid)
-
-    return lambda edge: build_pair_tensor(
-        edge,
-        bx,
-        by,
-        bz,
-        re,
-        reme,
-        ev1,
-        ev2,
-        ev3,
-        evx,
-        evy,
-        evz,
-        sp1,
-        sp2,
-        sp3,
-    ) + [
-        # longest_path_from_highest_centrality(graphs[edge[0]]),
-        # longest_path_from_highest_centrality(graphs[edge[1]]),
-        # mean_edge_energy_gap(graphs[edge[0]]),
-        # mean_edge_energy_gap(graphs[edge[1]]),
-        # mean_edge_length(graphs[edge[0]]),
-        # mean_edge_length(graphs[edge[1]]),
-        len(ve[edge[0]]),
-        len(ve[edge[1]]),
-        dst_map[(edge[0], edge[1])]
+    graph_features = [
+        get_graph_level_features(g) for g in get_graphs(tracksters, eid)
     ]
 
+    ve = tracksters["vertices_energy"].array()[eid]
+
+    return lambda edge: build_pair_tensor(edge, trackster_features) + [
+        dst_map[(edge[0], edge[1])],    # pairwise distance
+        len(ve[edge[0]]),               # num edges
+        len(ve[edge[1]]),               # num edges
+        *graph_features[edge[0]],
+        *graph_features[edge[1]],
+    ]
 
 
 class TracksterPairs(Dataset):
@@ -193,7 +186,8 @@ class TracksterPairs(Dataset):
         for (_, _, filenames) in walk(self.raw_data_path):
             files.extend(filenames)
             break
-        full_paths = list([self.raw_data_path + f for f in files])
+        full_paths = list([path.join(self.raw_data_path, f) for f in files])
+        assert len(full_paths) >= self.N_FILES
         return full_paths[:self.N_FILES]
 
     @property
@@ -206,7 +200,7 @@ class TracksterPairs(Dataset):
             "bal" if self.balanced else "nbal",
             "in" if self.include_neutral else "en",
         ]
-        return list([f"pairs{'_'.join(infos)}.pt"])
+        return list([f"pairs_{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):

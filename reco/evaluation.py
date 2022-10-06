@@ -191,6 +191,7 @@ def pairwise_model_evaluation(
     decision_th,
     max_distance=10,
     energy_threshold=10,
+    max_events=100,
 ):
     nt = tracksters["NTracksters"].array()
     model.eval()
@@ -202,7 +203,7 @@ def pairwise_model_evaluation(
         "reco_to_sim": []
     }
 
-    for eid in range(len(nt)):
+    for eid in range(min([len(nt), max_events])):
         # get candidate pairs
         candidate_pairs, dst_map = get_candidate_pairs(
             tracksters,
@@ -276,7 +277,7 @@ def pairwise_model_evaluation(
             vals = values[-1]
             print(f"\t{key}:\tP: {vals[0]:.2f} R: {vals[1]:.2f} F: {vals[2]:.2f}")
 
-    print("----------")
+    print("-----")
     for key, values in results.items():
         avg_p = np.mean([x[0] for x in values])
         avg_r = np.mean([x[1] for x in values])

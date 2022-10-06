@@ -68,4 +68,5 @@ def get_graphs(tracksters, eid, N=2):
     vy = tracksters["vertices_y"].array()[eid]
     vz = tracksters["vertices_z"].array()[eid]
     ve = tracksters["vertices_energy"].array()[eid]
-    return [create_graph(x, y, z, e, N=N) for x, y, z, e in zip(vx, vy, vz, ve)]
+    vi = tracksters["vertices_indexes"].array()[eid]
+    return [create_graph(x, y, z, e, i, N=N) for x, y, z, e, i in zip(vx, vy, vz, ve, vi)]

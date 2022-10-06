@@ -37,3 +37,25 @@ def mean_edge_energy_gap(G):
         e_diffs += abs(node_a["energy"] - node_b["energy"])
 
     return np.mean(e_diffs)
+
+def mean_degree(G):
+    return np.mean([d for _, d in G.degree()])
+
+def mean_degree_centrality(G):
+    return np.mean(list(nx.degree_centrality(G).values()))
+
+def mean_clustering_coefficient(G):
+    return nx.average_clustering(G)
+
+def get_graph_level_features(G):
+    """
+        Compute various graph level features out of G
+    """
+    return [
+        mean_degree(G),
+        mean_edge_length(G),
+        mean_edge_energy_gap(G),
+        mean_degree_centrality(G),
+        mean_clustering_coefficient(G),
+        longest_path_from_highest_centrality(G),
+    ]
