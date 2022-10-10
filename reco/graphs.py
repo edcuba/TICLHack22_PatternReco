@@ -14,20 +14,35 @@ def distance_matrix(trk_x, trk_y, trk_z):
     return distance
 
 
-def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index, N=1):
+def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index=None, N=1, higher_e=True):
+    """
+    Construct a graph of the point cloud.
+    Each node is assigned its energy and layercluster index info.
+
+    higher_e=True connects only to nodes with higher energy than the node
+    higher_e=False uses pure k-nn
+
+    Returns: networkx.Graph instance
+    """
+
     distance = distance_matrix(trk_x, trk_y, trk_z)
     G = nx.Graph()
     for i in range(len(trk_energy)):
-        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i], index=trk_lc_index[i])
+        lc_idx = None if trk_lc_index is None else trk_lc_index[i]
+        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i], index=lc_idx)
 
         # sort indices by distance
         idx_by_distance = np.argsort(distance[i])
 
-        # filter nodes with lower energy
-        idx_above_current = filter(lambda x: trk_energy[x] > trk_energy[i], idx_by_distance)
+        if higher_e:
+            # filter nodes with lower energy
+            candidate_nodes = filter(lambda x: trk_energy[x] > trk_energy[i], idx_by_distance)
+        else:
+            # exclude the node itself
+            candidate_nodes = idx_by_distance[1:]
 
         # add first N nodes with a higher energy
-        for c, idx in enumerate(idx_above_current):
+        for c, idx in enumerate(candidate_nodes):
             if c == N:
                 break
             G.add_edge(i, idx)

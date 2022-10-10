@@ -287,3 +287,140 @@ class TracksterPairs(Dataset):
             f"energy_threshold={self.ENERGY_THRESHOLD}"
         ]
         return f"<TracksterPairs {' '.join(infos)}>"
+
+
+class PointCloudPairs(Dataset):
+
+    def __init__(
+            self,
+            name,
+            root_dir,
+            raw_data_path,
+            balanced=False,
+            N_FILES=10,
+            MAX_DISTANCE=10,
+            ENERGY_THRESHOLD=10,
+    ):
+        self.name = name
+        self.N_FILES = N_FILES
+        self.MAX_DISTANCE = MAX_DISTANCE
+        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
+        self.raw_data_path = raw_data_path
+        self.root_dir = root_dir
+        self.balanced = balanced
+
+        fn = self.processed_paths[0]
+
+        if not path.exists(fn):
+            self.process()
+
+        dx1, dx2, dy = torch.load(fn)
+        self.x1 = dx1
+        self.x2 = dx2
+        self.y = torch.tensor(dy).type(torch.float)
+
+    @property
+    def raw_file_names(self):
+        files = []
+        for (_, _, filenames) in walk(self.raw_data_path):
+            files.extend(filenames)
+            break
+        full_paths = list([path.join(self.raw_data_path, f) for f in files])
+        assert len(full_paths) >= self.N_FILES
+        return full_paths[:self.N_FILES]
+
+    @property
+    def processed_file_names(self):
+        infos = [
+            self.name,
+            f"{self.N_FILES}f",
+            f"d{self.MAX_DISTANCE}",
+            f"e{self.ENERGY_THRESHOLD}",
+            "bal" if self.balanced else "nbal",
+        ]
+        return list([f"pc_pairs_{'_'.join(infos)}.pt"])
+
+    @property
+    def processed_paths(self):
+        return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
+
+    def __getitem__(self, idx):
+        return self.x1[idx], self.x2[idx], self.y[idx]
+
+    def __len__(self):
+        return len(self.y)
+
+    def __repr__(self):
+        infos = [
+            f"len={len(self)}",
+            f"max_distance={self.MAX_DISTANCE}",
+            f"balanced={self.balanced}",
+            f"energy_threshold={self.ENERGY_THRESHOLD}"
+        ]
+        return f"<PointCloudPairs {' '.join(infos)}>"
+
+
+    def process(self):
+        dataset_X1 = []
+        dataset_X2 = []
+        dataset_Y = []
+
+        for source in self.raw_file_names:
+            print(f"Processing: {source}")
+
+            tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
+            simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
+            associations = uproot.open({source: "ticlNtuplizer/associations"})
+            graph = uproot.open({source: "ticlNtuplizer/graph"})
+
+            for eid in range(len(tracksters["vertices_x"].array())):
+
+                candidate_pairs, _ = get_candidate_pairs(
+                    tracksters,
+                    graph,
+                    eid,
+                    max_distance=self.MAX_DISTANCE
+                )
+
+                gt_pairs = match_trackster_pairs(
+                    tracksters,
+                    simtracksters,
+                    associations,
+                    eid,
+                    energy_threshold=self.ENERGY_THRESHOLD,
+                    distance_threshold=self.MAX_DISTANCE,
+                )
+
+                ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
+                ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
+                c_pairs = set(candidate_pairs)
+
+                matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
+                not_matches = c_pairs - matches
+                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
+
+                if self.balanced:
+                    # crucial step to get right!
+                    take = min(len(matches), len(not_matches) - len(neutral))
+                    positive = random.sample(list(matches), k=take)
+                    negative = random.sample(list(not_matches - neutral), k=take)
+                else:
+                    positive = matches
+                    negative = not_matches - neutral
+
+                labels = [(positive, 1), (negative, 0)]
+
+                vx = tracksters["vertices_x"].array()[eid].tolist()
+                vy = tracksters["vertices_y"].array()[eid].tolist()
+                vz = tracksters["vertices_z"].array()[eid].tolist()
+                ve = tracksters["vertices_energy"].array()[eid].tolist()
+
+                for edges, label in labels:
+                    for (a, b) in edges:
+                        x1 = [vx[a], vy[a], vz[a], ve[a]]
+                        x2 = [vx[b], vy[b], vz[b], ve[b]]
+                        dataset_X1.append(x1)
+                        dataset_X2.append(x2)
+                        dataset_Y.append(label)
+
+        torch.save((dataset_X1, dataset_X2, dataset_Y), self.processed_paths[0])
