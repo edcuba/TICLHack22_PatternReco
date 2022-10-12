@@ -367,7 +367,7 @@ class PointCloudPairs(Dataset):
         x = [self.paddarray(a + b) for a, b in zip(x1, x2)]
         y = self.paddarray([1] * len(x1[0]) + [y] * len(x2[0]))
 
-        return torch.tensor(x).T, torch.tensor(y).type(torch.float)
+        return torch.tensor(x), torch.tensor(y).type(torch.float)
 
     def __len__(self):
         return len(self.y)
