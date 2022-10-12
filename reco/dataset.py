@@ -300,6 +300,7 @@ class PointCloudPairs(Dataset):
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
+            padding=None,
     ):
         self.name = name
         self.N_FILES = N_FILES
@@ -318,6 +319,12 @@ class PointCloudPairs(Dataset):
         self.x1 = dx1
         self.x2 = dx2
         self.y = torch.tensor(dy).type(torch.float)
+
+        mx = max([len(x1[0]) + len(x2[0]) for x1, x2 in zip(self.x1, self.x2)])
+        if not padding or padding < mx:
+            print(f"Recommended padding: >{mx}")
+        self.padding = padding
+
 
     @property
     def raw_file_names(self):
@@ -344,8 +351,23 @@ class PointCloudPairs(Dataset):
     def processed_paths(self):
         return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
 
+    def paddarray(self, arr):
+        if self.padding:
+            if len(arr) > self.padding:
+                return arr[:self.padding]
+            elif len(arr) < self.padding:
+                return arr + [0] * (self.padding - len(arr))
+        return arr
+
     def __getitem__(self, idx):
-        return self.x1[idx], self.x2[idx], self.y[idx]
+        x1 = self.x1[idx]
+        x2 = self.x2[idx]
+        y = self.y[idx]
+
+        x = [self.paddarray(a + b) for a, b in zip(x1, x2)]
+        y = self.paddarray([1] * len(x1[0]) + [y] * len(x2[0]))
+
+        return torch.tensor(x).T, torch.tensor(y).type(torch.float)
 
     def __len__(self):
         return len(self.y)
@@ -422,5 +444,4 @@ class PointCloudPairs(Dataset):
                         dataset_X1.append(x1)
                         dataset_X2.append(x2)
                         dataset_Y.append(label)
-
         torch.save((dataset_X1, dataset_X2, dataset_Y), self.processed_paths[0])
