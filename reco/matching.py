@@ -108,6 +108,10 @@ def find_good_pairs(tracksters, associations, pair_list, eid, confidence_thresho
     """
         Take a pair list
         Return pairs that are coming from the same particle
+
+        XXX: this seems to be buggy
+        - running this on a list of candidate pairs should return all good pairs
+        - but there is a large discrepancy between the output of this and ground truth method
     """
 
     # get the raw energy of reco and sim tracksters

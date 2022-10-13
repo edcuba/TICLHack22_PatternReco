@@ -48,7 +48,8 @@ def match_trackster_pairs(
     energy_threshold=10,
     distance_type="pairwise",
     distance_threshold=10,
-    confidence_threshold=0.5
+    confidence_threshold=0.5,
+    best_only=True,
 ):
     raw_e = tracksters["raw_energy"].array()[eid]
     raw_st = simtracksters["stsSC_raw_energy"].array()[eid]
@@ -81,10 +82,17 @@ def match_trackster_pairs(
         if len(large_spt) > 0 and max_fr >= confidence_threshold:
             # compute distances
             dists = dst_func(tt_id, large_spt)
-            m_dist = min(dists)
-            if m_dist < distance_threshold:
-                # this must be an array, not a tuple, awkward doesn't like tuples
-                pairs.append([tt_id, large_spt[np.argmin(dists)], m_dist])
+
+            if best_only:
+                m_dist = min(dists)
+                if m_dist < distance_threshold:
+                    # this must be an array, not a tuple, awkward doesn't like tuples
+                    pairs.append([tt_id, large_spt[np.argmin(dists)], m_dist])
+            else:
+                # add all possible edges, not just the best one
+                for large_spt_id, dist in enumerate(dists):
+                    if dist < distance_threshold:
+                        pairs.append([tt_id, large_spt[large_spt_id], dist])
 
     return pairs
 
@@ -287,6 +295,150 @@ class TracksterPairs(Dataset):
             f"energy_threshold={self.ENERGY_THRESHOLD}"
         ]
         return f"<TracksterPairs {' '.join(infos)}>"
+
+
+class TracksterGraph(Dataset):
+
+    def __init__(
+            self,
+            name,
+            root_dir,
+            raw_data_path,
+            transform=None,
+            balanced=False,
+            include_neutral=True,
+            N_FILES=10,
+            MAX_DISTANCE=10,
+            ENERGY_THRESHOLD=10,
+        ):
+        self.name = name
+        self.N_FILES = N_FILES
+        self.MAX_DISTANCE = MAX_DISTANCE
+        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
+        self.raw_data_path = raw_data_path
+
+        self.root_dir = root_dir
+        self.transform = transform
+        self.balanced = balanced
+        self.include_neutral = include_neutral
+
+        fn = self.processed_paths[0]
+
+        if not path.exists(fn):
+            self.process()
+
+        dx, dy = torch.load(fn)
+        self.x = torch.tensor(dx).type(torch.float)
+        self.y = torch.tensor(dy).type(torch.float)
+
+    @property
+    def raw_file_names(self):
+        files = []
+        for (_, _, filenames) in walk(self.raw_data_path):
+            files.extend(filenames)
+            break
+        full_paths = list([path.join(self.raw_data_path, f) for f in files])
+        assert len(full_paths) >= self.N_FILES
+        return full_paths[:self.N_FILES]
+
+    @property
+    def processed_file_names(self):
+        infos = [
+            self.name,
+            f"{self.N_FILES}f",
+            f"d{self.MAX_DISTANCE}",
+            f"e{self.ENERGY_THRESHOLD}",
+            "bal" if self.balanced else "nbal",
+            "in" if self.include_neutral else "en",
+        ]
+        return list([f"pairs_{'_'.join(infos)}.pt"])
+
+    @property
+    def processed_paths(self):
+        return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
+
+    def process(self):
+        """
+            for now, the dataset fits into the memory
+            store in one file and load at once
+
+            if needed, store in multiple files (processed file names)
+            and implement a get method
+        """
+        dataset_X = []
+        dataset_Y = []
+        for source in self.raw_file_names:
+            print(f"Processing: {source}")
+
+            tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
+            simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
+            associations = uproot.open({source: "ticlNtuplizer/associations"})
+            graph = uproot.open({source: "ticlNtuplizer/graph"})
+
+            for eid in range(len(tracksters["vertices_x"].array())):
+
+                candidate_pairs, dst_map = get_candidate_pairs(
+                    tracksters,
+                    graph,
+                    eid,
+                    max_distance=self.MAX_DISTANCE
+                )
+
+                gt_pairs = match_trackster_pairs(
+                    tracksters,
+                    simtracksters,
+                    associations,
+                    eid,
+                    energy_threshold=self.ENERGY_THRESHOLD,
+                    distance_threshold=self.MAX_DISTANCE,
+                )
+
+                ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
+                ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
+                c_pairs = set(candidate_pairs)
+
+                matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
+                not_matches = c_pairs - matches
+                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
+
+                if self.balanced:
+                    # crucial step to get right!
+                    take = min(len(matches), len(not_matches) - len(neutral))
+                    positive = random.sample(list(matches), k=take)
+                    negative = random.sample(list(not_matches - neutral), k=take)
+                else:
+                    positive = matches
+                    negative = not_matches - neutral
+
+                builder = get_pair_tensor_builder(tracksters, eid, dst_map)
+
+                labels = [(positive, 1), (negative, 0)]
+                if self.include_neutral:
+                    labels.append((neutral, 0.5))
+
+                for edges, label in labels:
+                    for edge in edges:
+                        sample = builder(edge)
+                        dataset_X.append(sample)
+                        dataset_Y.append(label)
+
+        torch.save((dataset_X, dataset_Y), self.processed_paths[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
+
+    def __len__(self):
+        return len(self.y)
+
+    def __repr__(self):
+        infos = [
+            f"len={len(self)}",
+            f"balanced={self.balanced}",
+            f"max_distance={self.MAX_DISTANCE}",
+            f"energy_threshold={self.ENERGY_THRESHOLD}"
+        ]
+        return f"<TracksterPairs {' '.join(infos)}>"
+
 
 
 class PointCloudPairs(Dataset):
