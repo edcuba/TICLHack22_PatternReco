@@ -304,32 +304,31 @@ class TracksterGraph(Dataset):
             name,
             root_dir,
             raw_data_path,
-            transform=None,
-            balanced=False,
-            include_neutral=True,
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
+            include_graph_features=False,
         ):
         self.name = name
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE
         self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
         self.raw_data_path = raw_data_path
+        self.include_graph_features = include_graph_features
 
         self.root_dir = root_dir
-        self.transform = transform
-        self.balanced = balanced
-        self.include_neutral = include_neutral
 
         fn = self.processed_paths[0]
 
         if not path.exists(fn):
             self.process()
 
-        dx, dy = torch.load(fn)
-        self.x = torch.tensor(dx).type(torch.float)
-        self.y = torch.tensor(dy).type(torch.float)
+        dx, d_edge_list, d_edge_length, dy = torch.load(fn)
+
+        self.x = dx
+        self.edge_list = d_edge_list
+        self.edge_length = d_edge_length
+        self.y = dy
 
     @property
     def raw_file_names(self):
@@ -348,25 +347,20 @@ class TracksterGraph(Dataset):
             f"{self.N_FILES}f",
             f"d{self.MAX_DISTANCE}",
             f"e{self.ENERGY_THRESHOLD}",
-            "bal" if self.balanced else "nbal",
-            "in" if self.include_neutral else "en",
+            "gf" if self.include_graph_features else "ngf",
         ]
-        return list([f"pairs_{'_'.join(infos)}.pt"])
+        return list([f"graph_{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):
         return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
 
     def process(self):
-        """
-            for now, the dataset fits into the memory
-            store in one file and load at once
-
-            if needed, store in multiple files (processed file names)
-            and implement a get method
-        """
         dataset_X = []
         dataset_Y = []
+        dataset_edge_list = []
+        dataset_edge_length = []
+
         for source in self.raw_file_names:
             print(f"Processing: {source}")
 
@@ -391,41 +385,42 @@ class TracksterGraph(Dataset):
                     eid,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
+                    best_only=False,
                 )
 
                 ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
                 ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
                 c_pairs = set(candidate_pairs)
 
-                matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
-                not_matches = c_pairs - matches
-                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
+                positive = ab_pairs.union(ba_pairs).intersection(c_pairs)
 
-                if self.balanced:
-                    # crucial step to get right!
-                    take = min(len(matches), len(not_matches) - len(neutral))
-                    positive = random.sample(list(matches), k=take)
-                    negative = random.sample(list(not_matches - neutral), k=take)
-                else:
-                    positive = matches
-                    negative = not_matches - neutral
+                trackster_features = list([
+                    tracksters[k].array()[eid] for k in FEATURE_KEYS
+                ])
 
-                builder = get_pair_tensor_builder(tracksters, eid, dst_map)
+                ve = tracksters["vertices_energy"].array()[eid]
 
-                labels = [(positive, 1), (negative, 0)]
-                if self.include_neutral:
-                    labels.append((neutral, 0.5))
+                graph_features = list([
+                    get_graph_level_features(g) for g in get_graphs(tracksters, eid)
+                ]) if self.include_graph_features else None
 
-                for edges, label in labels:
-                    for edge in edges:
-                        sample = builder(edge)
-                        dataset_X.append(sample)
-                        dataset_Y.append(label)
+                tx_list = []
+                for tx in range(len(ve)):
+                    tx_features = [f[tx] for f in trackster_features]
+                    if self.include_graph_features:
+                        tx_features += graph_features[tx]
+                    tx_features += [len(ve[tx])]
+                    tx_list.append(tx_features)
 
-        torch.save((dataset_X, dataset_Y), self.processed_paths[0])
+                dataset_X.append(tx_list)
+                dataset_edge_list.append(candidate_pairs)
+                dataset_edge_length.append(list(dst_map[edge] for edge in candidate_pairs))
+                dataset_Y.append(list(int(cp in positive) for cp in candidate_pairs))
+
+        torch.save((dataset_X, dataset_edge_list, dataset_edge_length, dataset_Y), self.processed_paths[0])
 
     def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
+        return torch.tensor(self.x[idx]), torch.tensor(self.edge_list[idx]), self.edge_length[idx], torch.tensor(self.y[idx])
 
     def __len__(self):
         return len(self.y)
@@ -433,11 +428,11 @@ class TracksterGraph(Dataset):
     def __repr__(self):
         infos = [
             f"len={len(self)}",
-            f"balanced={self.balanced}",
             f"max_distance={self.MAX_DISTANCE}",
-            f"energy_threshold={self.ENERGY_THRESHOLD}"
+            f"energy_threshold={self.ENERGY_THRESHOLD}",
+            f"include_graph_features={self.include_graph_features}"
         ]
-        return f"<TracksterPairs {' '.join(infos)}>"
+        return f"<TrackstersGraph {' '.join(infos)}>"
 
 
 
@@ -472,8 +467,8 @@ class PointCloudPairs(Dataset):
         self.x2 = dx2
         self.y = torch.tensor(dy).type(torch.float)
 
-        mx = max([len(x1[0]) + len(x2[0]) for x1, x2 in zip(self.x1, self.x2)])
-        if not padding or padding < mx:
+        if padding:
+            mx = max([len(x1[0]) + len(x2[0]) for x1, x2 in zip(self.x1, self.x2)])
             print(f"Recommended padding: >{mx}")
         self.padding = padding
 
