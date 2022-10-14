@@ -323,11 +323,10 @@ class TracksterGraph(Dataset):
         if not path.exists(fn):
             self.process()
 
-        dx, d_edge_list, d_edge_length, dy = torch.load(fn)
+        dx, d_edge_list, dy = torch.load(fn)
 
         self.x = dx
         self.edge_list = d_edge_list
-        self.edge_length = d_edge_length
         self.y = dy
 
     @property
@@ -359,7 +358,6 @@ class TracksterGraph(Dataset):
         dataset_X = []
         dataset_Y = []
         dataset_edge_list = []
-        dataset_edge_length = []
 
         for source in self.raw_file_names:
             print(f"Processing: {source}")
@@ -371,12 +369,15 @@ class TracksterGraph(Dataset):
 
             for eid in range(len(tracksters["vertices_x"].array())):
 
-                candidate_pairs, dst_map = get_candidate_pairs(
+                candidate_pairs, _ = get_candidate_pairs(
                     tracksters,
                     graph,
                     eid,
                     max_distance=self.MAX_DISTANCE
                 )
+
+                if len(candidate_pairs) == 0:
+                    continue
 
                 gt_pairs = match_trackster_pairs(
                     tracksters,
@@ -414,13 +415,12 @@ class TracksterGraph(Dataset):
 
                 dataset_X.append(tx_list)
                 dataset_edge_list.append(candidate_pairs)
-                dataset_edge_length.append(list(dst_map[edge] for edge in candidate_pairs))
                 dataset_Y.append(list(int(cp in positive) for cp in candidate_pairs))
 
-        torch.save((dataset_X, dataset_edge_list, dataset_edge_length, dataset_Y), self.processed_paths[0])
+        torch.save((dataset_X, dataset_edge_list, dataset_Y), self.processed_paths[0])
 
     def __getitem__(self, idx):
-        return torch.tensor(self.x[idx]), torch.tensor(self.edge_list[idx]), self.edge_length[idx], torch.tensor(self.y[idx])
+        return torch.tensor(self.x[idx]), torch.tensor(self.edge_list[idx]), torch.tensor(self.y[idx])
 
     def __len__(self):
         return len(self.y)

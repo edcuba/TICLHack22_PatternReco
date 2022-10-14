@@ -112,7 +112,8 @@ stack-data==0.3.0
 terminado==0.15.0
 threadpoolctl==3.1.0
 tinycss2==1.1.1
-torch==1.13.0.dev20220928
+torch==1.12.0
+torch-geometric==2.1.0.post1
 torch-scatter==2.0.9
 torch-sparse==0.6.15
 tornado==6.1

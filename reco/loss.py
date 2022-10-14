@@ -4,10 +4,13 @@ import torch.nn.functional as F
 
 
 class FocalLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, alpha=0.25, gamma=2):
         super(FocalLoss, self).__init__()
 
-    def forward(self, predictions, targets, gamma, alpha):
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, predictions, targets):
         """
         Binary focal loss, mean.
 
@@ -21,7 +24,7 @@ class FocalLoss(nn.Module):
         """
         bce_loss = F.binary_cross_entropy(predictions, targets)
         p_t = torch.exp(-bce_loss)
-        alpha_tensor = (1 - alpha) + targets * (2 * alpha - 1)
+        alpha_tensor = (1 - self.alpha) + targets * (2 * self.alpha - 1)
         # alpha if target = 1 and 1 - alpha if target = 0
-        f_loss = alpha_tensor * (1 - p_t) ** gamma * bce_loss
+        f_loss = alpha_tensor * (1 - p_t) ** self.gamma * bce_loss
         return f_loss.mean()
