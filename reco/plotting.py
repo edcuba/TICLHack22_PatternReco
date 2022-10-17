@@ -23,33 +23,60 @@ def plot_tracksters(ax, vx, vy, vz, ve):
         plot_trackster(ax, i, x, y, z, e)
 
 
+def get_event_window(ex, ey, ez, ee, zoom=1, e_threshold=2):
+
+    ef = np.where(ak.flatten(ee) > e_threshold)
+
+    x_max = max(ak.flatten(ex)[ef])
+    x_min = min(ak.flatten(ex)[ef])
+    y_max = max(ak.flatten(ey)[ef])
+    y_min = min(ak.flatten(ey)[ef])
+    z_max = max(ak.flatten(ez)[ef])
+    z_min = min(ak.flatten(ez)[ef])
+
+    x_zoom = (x_max - x_min) / zoom
+    x_max -= x_zoom
+    x_min += x_zoom
+
+    y_zoom = (y_max - y_min) / zoom
+    y_max -= y_zoom
+    y_min += y_zoom
+
+    z_zoom = (z_max - z_min) / zoom
+    z_max -= z_zoom
+    z_min += z_zoom
+
+    return (x_min, x_max), (y_min, y_max), (z_min, z_max)
+
+
+
 def plot_sim_reco(
-    vx, vy, vz, ve, svx, svy, svz, sve, svi, svm, eid, legend=True,
+    vx,
+    vy,
+    vz,
+    ve,
+    svx,
+    svy,
+    svz,
+    sve,
+    svi,
+    svm,
+    legend=True,
+    zoom=1,
+    figsize=(12, 10),
+    align_dim=True,
 ):
     # get approximate plottable area
-    x_max = max(ak.flatten(svx))
-    x_min = min(ak.flatten(svx))
-    y_max = max(ak.flatten(svy))
-    y_min = min(ak.flatten(svy))
-    z_max = max(ak.flatten(svz))
-    z_min = min(ak.flatten(svz))
 
-    fig = plt.figure(figsize=(12, 10))
 
-    ax = fig.add_subplot(121, projection='3d')
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
-    ax.set_zlim(z_min, z_max)
-    plot_tracksters(ax, vx, vy, vz, ve)
+    fig = plt.figure(figsize=figsize)
 
-    ax.set_title(f"Event {eid}: Layerclusters reco")
-    if legend:
-        ax.legend()
+    xlim, ylim, zlim = get_event_window(svx, svy, svz, sve, zoom=zoom)
 
     ax = fig.add_subplot(122, projection='3d')
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
-    ax.set_zlim(z_min, z_max)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_zlim(zlim)
     ax.set_xlabel("x (cm)")
     ax.set_ylabel("y (cm)")
     ax.set_zlabel("z (cm)")
@@ -77,9 +104,25 @@ def plot_sim_reco(
             _te.append(e)
         plot_trackster(ax, ti, _tx, _ty, _tz, _te)
 
-    ax.set_title(f"Event {eid}: Layerclusters sim")
+    ax.set_title(f"Simulation layer-clusters ({len(svx)})")
+
     if legend:
         ax.legend()
+
+    # plot reco
+    if not align_dim:
+        xlim, ylim, zlim = get_event_window(vx, vy, vz, ve, zoom=zoom)
+
+    ax = fig.add_subplot(121, projection='3d')
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_zlim(zlim)
+    plot_tracksters(ax, vx, vy, vz, ve)
+
+    ax.set_title(f"Reconstruction layer-clusters ({len(vx)})")
+    if legend:
+        ax.legend()
+
 
 
 def plot_event(tracksters, simtracksters, eid, legend=True):
