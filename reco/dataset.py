@@ -5,6 +5,8 @@ import numpy as np
 from os import walk, path
 from torch.utils.data import Dataset
 
+from torch_geometric.data import Data, InMemoryDataset
+
 from .event import get_bary, get_candidate_pairs, remap_tracksters
 from .matching import match_best_simtrackster, find_good_pairs
 from .distance import euclidian_distance
@@ -297,13 +299,16 @@ class TracksterPairs(Dataset):
         return f"<TracksterPairs {' '.join(infos)}>"
 
 
-class TracksterGraph(Dataset):
+class TracksterGraph(InMemoryDataset):
 
     def __init__(
             self,
             name,
             root_dir,
             raw_data_path,
+            transform=None,
+            pre_transform=None,
+            pre_filter=None,
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
@@ -315,19 +320,10 @@ class TracksterGraph(Dataset):
         self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
         self.raw_data_path = raw_data_path
         self.include_graph_features = include_graph_features
-
         self.root_dir = root_dir
 
-        fn = self.processed_paths[0]
-
-        if not path.exists(fn):
-            self.process()
-
-        dx, d_edge_list, dy = torch.load(fn)
-
-        self.x = dx
-        self.edge_list = d_edge_list
-        self.y = dy
+        super(TracksterGraph, self).__init__(root_dir, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self):
@@ -355,12 +351,10 @@ class TracksterGraph(Dataset):
         return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
 
     def process(self):
-        dataset_X = []
-        dataset_Y = []
-        dataset_edge_list = []
+        data_list = []
 
         for source in self.raw_file_names:
-            print(f"Processing: {source}")
+            print(source)
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
             simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
@@ -413,26 +407,25 @@ class TracksterGraph(Dataset):
                     tx_features += [len(ve[tx])]
                     tx_list.append(tx_features)
 
-                dataset_X.append(tx_list)
-                dataset_edge_list.append(candidate_pairs)
-                dataset_Y.append(list(int(cp in positive) for cp in candidate_pairs))
+                data_list.append(Data(
+                    x=torch.tensor(tx_list),
+                    edge_index=torch.tensor(candidate_pairs).T,
+                    y=torch.tensor(list(int(cp in positive) for cp in candidate_pairs))
+                ))
 
-        torch.save((dataset_X, dataset_edge_list, dataset_Y), self.processed_paths[0])
-
-    def __getitem__(self, idx):
-        return torch.tensor(self.x[idx]), torch.tensor(self.edge_list[idx]), torch.tensor(self.y[idx])
-
-    def __len__(self):
-        return len(self.y)
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
 
     def __repr__(self):
         infos = [
-            f"len={len(self)}",
+            f"graphs={len(self)}",
+            f"nodes={len(self.data.x)}",
+            f"edges={len(self.data.y)}",
             f"max_distance={self.MAX_DISTANCE}",
             f"energy_threshold={self.ENERGY_THRESHOLD}",
-            f"include_graph_features={self.include_graph_features}"
+            f"graph_features={self.include_graph_features}"
         ]
-        return f"<TrackstersGraph {' '.join(infos)}>"
+        return f"TrackstersGraph({', '.join(infos)})"
 
 
 

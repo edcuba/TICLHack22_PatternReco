@@ -2,28 +2,29 @@ import torch
 import numpy as np
 
 
-def train_edge_pred(model, device, optimizer, loss_func, train_dl, batch_size):
+def train_edge_pred(model, device, optimizer, loss_func, train_dl):
     train_loss = 0.0
     model.train()
 
     train_true_seg = []
     train_pred_seg = []
 
-    for data, edge_list, labels in train_dl:
+    for data in train_dl:
 
-        data, seg = data.to(device), labels.to(device)
+        batch_size = len(data)
+        data = data.to(device)
 
         optimizer.zero_grad()
 
-        seg_pred = model(data, edge_list.T.type(torch.long))
-        loss = loss_func(seg_pred.view(-1, 1), seg.view(-1, 1).type(torch.float))
+        seg_pred = model(data.x, data.edge_index)
+        loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item() * batch_size
 
-        seg_np = seg.cpu().numpy()
+        seg_np = data.y.cpu().numpy()
         pred_np = seg_pred.detach().cpu().numpy()
 
         train_true_seg.append(seg_np.reshape(-1))
@@ -36,22 +37,24 @@ def train_edge_pred(model, device, optimizer, loss_func, train_dl, batch_size):
 
 
 @torch.no_grad()
-def test_edge_pred(model, device, loss_func, test_dl, batch_size):
+def test_edge_pred(model, device, loss_func, test_dl):
     test_loss = 0.0
     model.eval()
 
     test_true_seg = []
     test_pred_seg = []
-    for data, edge_list, labels in test_dl:
-        data, seg = data.to(device), labels.to(device)
+    for data in test_dl:
 
-        seg_pred = model(data, edge_list.T.type(torch.long))
+        batch_size = len(data)
+        data = data.to(device)
 
-        loss = loss_func(seg_pred.view(-1, 1), seg.view(-1, 1).type(torch.float))
+        seg_pred = model(data.x, data.edge_index)
+
+        loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 
         test_loss += loss.item() * batch_size
 
-        seg_np = seg.cpu().numpy()
+        seg_np = data.y.cpu().numpy()
         pred_np = seg_pred.detach().cpu().numpy()
         test_true_seg.append(seg_np.reshape(-1))
         test_pred_seg.append(pred_np.reshape(-1))
