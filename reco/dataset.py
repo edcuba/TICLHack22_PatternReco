@@ -445,7 +445,7 @@ class TracksterGraph(InMemoryDataset):
                 for tx in range(len(ve)):
                     tx_features = [f[tx] for f in trackster_features]
                     if self.include_graph_features:
-                        graph = create_graph(vx[tx], vy[tx], vz[tx], ve[tx], vi[tx], N=2)
+                        g = create_graph(vx[tx], vy[tx], vz[tx], ve[tx], vi[tx], N=2)
                         tx_features += get_graph_level_features(g)
                     tx_features += [len(ve[tx])]
                     tx_list.append(tx_features)
