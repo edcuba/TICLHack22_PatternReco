@@ -7,11 +7,11 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs, remap_tracksters
-from .matching import match_best_simtrackster, find_good_pairs
+from .event import get_bary, get_candidate_pairs, get_candidate_pairs_direct, remap_tracksters
+from .matching import match_best_simtrackster_direct, find_good_pairs
 from .distance import euclidian_distance
 
-from .graphs import get_graphs
+from .graphs import get_graphs, create_graph
 from .features import get_graph_level_features
 
 
@@ -42,36 +42,21 @@ def _pairwise_func(clouds):
     return lambda tt_id, large_spt: list([euclidian_distance(clouds[tt_id], clouds[lsp]) for lsp in large_spt])
 
 
-def match_trackster_pairs(
-    tracksters,
-    simtracksters,
-    associations,
-    eid,
+def match_trackster_pairs_direct(
+    raw_e,
+    raw_st,
+    dst_func,
+    s2ri,
+    s2r_SE,
     energy_threshold=10,
-    distance_type="pairwise",
-    distance_threshold=10,
     confidence_threshold=0.5,
-    best_only=True,
+    distance_threshold=10,
+    best_only=True
 ):
-    raw_e = tracksters["raw_energy"].array()[eid]
-    raw_st = simtracksters["stsSC_raw_energy"].array()[eid]
-
     large_tracksters = np.where(raw_e > energy_threshold)[0]
     tiny_tracksters = np.where(raw_e <= energy_threshold)[0]
 
-    if distance_type == "pairwise":
-        vx = tracksters["vertices_x"].array()[eid]
-        vy = tracksters["vertices_y"].array()[eid]
-        vz = tracksters["vertices_z"].array()[eid]
-        clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(raw_e))]
-        dst_func = _pairwise_func(clouds)
-    elif distance_type == "bary":
-        bary = get_bary(tracksters, eid)
-        dst_func = _bary_func(bary)
-    else:
-        raise RuntimeError("Distance type '%s' not supported", distance_type)
-
-    reco_fr, reco_st = match_best_simtrackster(tracksters, associations, eid)
+    reco_fr, reco_st = match_best_simtrackster_direct(raw_e, s2ri, s2r_SE)
     same_particle_tracksters = [np.where(np.array(reco_st) == st) for st in range(len(raw_st))]
     large_spts = [np.intersect1d(spt, large_tracksters) for spt in same_particle_tracksters]
 
@@ -97,6 +82,48 @@ def match_trackster_pairs(
                         pairs.append([tt_id, large_spt[large_spt_id], dist])
 
     return pairs
+
+def match_trackster_pairs(
+    tracksters,
+    simtracksters,
+    associations,
+    eid,
+    energy_threshold=10,
+    distance_type="pairwise",
+    distance_threshold=10,
+    confidence_threshold=0.5,
+    best_only=True,
+):
+    raw_e = tracksters["raw_energy"].array()[eid]
+    raw_st = simtracksters["stsSC_raw_energy"].array()[eid]
+
+    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+
+
+    if distance_type == "pairwise":
+        vx = tracksters["vertices_x"].array()[eid]
+        vy = tracksters["vertices_y"].array()[eid]
+        vz = tracksters["vertices_z"].array()[eid]
+        clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(raw_e))]
+        dst_func = _pairwise_func(clouds)
+    elif distance_type == "bary":
+        bary = get_bary(tracksters, eid)
+        dst_func = _bary_func(bary)
+    else:
+        raise RuntimeError("Distance type '%s' not supported", distance_type)
+
+    return match_trackster_pairs_direct(
+        raw_e,
+        raw_st,
+        dst_func,
+        s2ri,
+        s2r_SE,
+        energy_threshold=energy_threshold,
+        confidence_threshold=confidence_threshold,
+        distance_threshold=distance_threshold,
+        best_only=best_only
+    )
 
 
 def get_ground_truth(
@@ -236,20 +263,32 @@ class TracksterPairs(Dataset):
 
             for eid in range(len(tracksters["vertices_x"].array())):
 
-                candidate_pairs, dst_map = get_candidate_pairs(
-                    tracksters,
-                    graph,
-                    eid,
-                    max_distance=self.MAX_DISTANCE
-                )
+                vx = tracksters["vertices_x"].array()[eid]
+                vy = tracksters["vertices_y"].array()[eid]
+                vz = tracksters["vertices_z"].array()[eid]
 
-                gt_pairs = match_trackster_pairs(
-                    tracksters,
-                    simtracksters,
-                    associations,
-                    eid,
+                raw_energy = tracksters["raw_energy"].array()[eid]
+                raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
+
+                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+                sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+                inners = graph["linked_inners"].array()[eid]
+
+                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+                candidate_pairs, dst_map = get_candidate_pairs_direct(clouds, inners, max_distance=self.MAX_DISTANCE)
+
+                if len(candidate_pairs) == 0:
+                    continue
+
+                gt_pairs = match_trackster_pairs_direct(
+                    raw_energy,
+                    raw_st_energy,
+                    _pairwise_func(clouds),
+                    sim2reco_indexes,
+                    sim2reco_shared_energy,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
+                    best_only=False,
                 )
 
                 ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
@@ -362,22 +401,31 @@ class TracksterGraph(InMemoryDataset):
             graph = uproot.open({source: "ticlNtuplizer/graph"})
 
             for eid in range(len(tracksters["vertices_x"].array())):
+                vx = tracksters["vertices_x"].array()[eid]
+                vy = tracksters["vertices_y"].array()[eid]
+                vz = tracksters["vertices_z"].array()[eid]
+                ve = tracksters["vertices_energy"].array()[eid]
+                vi = tracksters["vertices_indexes"].array()[eid]
 
-                candidate_pairs, _ = get_candidate_pairs(
-                    tracksters,
-                    graph,
-                    eid,
-                    max_distance=self.MAX_DISTANCE
-                )
+                raw_energy = tracksters["raw_energy"].array()[eid]
+                raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
+
+                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+                sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+                inners = graph["linked_inners"].array()[eid]
+
+                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+                candidate_pairs, _ = get_candidate_pairs_direct(clouds, inners, max_distance=self.MAX_DISTANCE)
 
                 if len(candidate_pairs) == 0:
                     continue
 
-                gt_pairs = match_trackster_pairs(
-                    tracksters,
-                    simtracksters,
-                    associations,
-                    eid,
+                gt_pairs = match_trackster_pairs_direct(
+                    raw_energy,
+                    raw_st_energy,
+                    _pairwise_func(clouds),
+                    sim2reco_indexes,
+                    sim2reco_shared_energy,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
                     best_only=False,
@@ -393,17 +441,12 @@ class TracksterGraph(InMemoryDataset):
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
                 ])
 
-                ve = tracksters["vertices_energy"].array()[eid]
-
-                graph_features = list([
-                    get_graph_level_features(g) for g in get_graphs(tracksters, eid)
-                ]) if self.include_graph_features else None
-
                 tx_list = []
                 for tx in range(len(ve)):
                     tx_features = [f[tx] for f in trackster_features]
                     if self.include_graph_features:
-                        tx_features += graph_features[tx]
+                        graph = create_graph(vx[tx], vy[tx], vz[tx], ve[tx], vi[tx], N=2)
+                        tx_features += get_graph_level_features(g)
                     tx_features += [len(ve[tx])]
                     tx_list.append(tx_features)
 
@@ -537,20 +580,33 @@ class PointCloudPairs(Dataset):
 
             for eid in range(len(tracksters["vertices_x"].array())):
 
-                candidate_pairs, _ = get_candidate_pairs(
-                    tracksters,
-                    graph,
-                    eid,
-                    max_distance=self.MAX_DISTANCE
-                )
+                vx = tracksters["vertices_x"].array()[eid]
+                vy = tracksters["vertices_y"].array()[eid]
+                vz = tracksters["vertices_z"].array()[eid]
+                ve = tracksters["vertices_energy"].array()[eid]
 
-                gt_pairs = match_trackster_pairs(
-                    tracksters,
-                    simtracksters,
-                    associations,
-                    eid,
+                raw_energy = tracksters["raw_energy"].array()[eid]
+                raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
+
+                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+                sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+                inners = graph["linked_inners"].array()[eid]
+
+                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+                candidate_pairs, _ = get_candidate_pairs_direct(clouds, inners, max_distance=self.MAX_DISTANCE)
+
+                if len(candidate_pairs) == 0:
+                    continue
+
+                gt_pairs = match_trackster_pairs_direct(
+                    raw_energy,
+                    raw_st_energy,
+                    _pairwise_func(clouds),
+                    sim2reco_indexes,
+                    sim2reco_shared_energy,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
+                    best_only=False,
                 )
 
                 ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
@@ -572,15 +628,15 @@ class PointCloudPairs(Dataset):
 
                 labels = [(positive, 1), (negative, 0)]
 
-                vx = tracksters["vertices_x"].array()[eid].tolist()
-                vy = tracksters["vertices_y"].array()[eid].tolist()
-                vz = tracksters["vertices_z"].array()[eid].tolist()
-                ve = tracksters["vertices_energy"].array()[eid].tolist()
+                v_x = ve.tolist()
+                v_y = vy.tolist()
+                v_z = vz.tolist()
+                v_e = ve.tolist()
 
                 for edges, label in labels:
                     for (a, b) in edges:
-                        x1 = [vx[a], vy[a], vz[a], ve[a]]
-                        x2 = [vx[b], vy[b], vz[b], ve[b]]
+                        x1 = [v_x[a], v_y[a], v_z[a], v_e[a]]
+                        x2 = [v_x[b], v_y[b], v_z[b], v_e[b]]
                         dataset_X1.append(x1)
                         dataset_X2.append(x2)
                         dataset_Y.append(label)

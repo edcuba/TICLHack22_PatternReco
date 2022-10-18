@@ -74,18 +74,12 @@ def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associa
     return reco_fr, reco_st
 
 
-def match_best_simtrackster(tracksters, associations, eid):
-    """
-        returns fraction of recotrackster belonging to the simtrackster
-    """
-    num_rec_t = tracksters["NTracksters"].array()[eid]
-
-    # get the raw energy of reco and sim tracksters
-    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
-
-    # get the shared energy mapping
-    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
-    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+def match_best_simtrackster_direct(
+    raw_energy,
+    s2ri,
+    s2r_SE,
+):
+    num_rec_t = len(raw_energy)
 
     # keep the highest fraction
     reco_fr = [0] * num_rec_t
@@ -101,6 +95,20 @@ def match_best_simtrackster(tracksters, associations, eid):
                 reco_st[rt_i] = st_i
 
     return reco_fr, reco_st
+
+
+
+def match_best_simtrackster(tracksters, associations, eid):
+    """
+        returns fraction of recotrackster belonging to the simtrackster
+    """
+    # get the raw energy of reco and sim tracksters
+    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
+
+    # get the shared energy mapping
+    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+    return match_best_simtrackster_direct(raw_energy, s2ri, s2r_SE)
 
 
 

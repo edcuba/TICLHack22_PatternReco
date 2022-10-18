@@ -119,18 +119,11 @@ def remap_tracksters(tracksters, new_mapping, eid):
     return result
 
 
-def get_candidate_pairs(tracksters, graph, eid, max_distance=10):
-    vx = tracksters["vertices_x"].array()[eid]
-    vy = tracksters["vertices_y"].array()[eid]
-    vz = tracksters["vertices_z"].array()[eid]
-    clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-
-    inners_list = graph["linked_inners"].array()[eid]
-
+def get_candidate_pairs_direct(clouds, inners, max_distance=10):
     candidate_pairs = []
     dst_map = {}
 
-    for i, inners in enumerate(inners_list):
+    for i, inners in enumerate(inners):
         for inner in inners:
             dst = euclidian_distance(clouds[i], clouds[inner])
             if dst <= max_distance:
@@ -138,3 +131,15 @@ def get_candidate_pairs(tracksters, graph, eid, max_distance=10):
                 dst_map[(i, inner)] = dst
 
     return candidate_pairs, dst_map
+
+
+
+def get_candidate_pairs(tracksters, graph, eid, max_distance=10):
+    vx = tracksters["vertices_x"].array()[eid]
+    vy = tracksters["vertices_y"].array()[eid]
+    vz = tracksters["vertices_z"].array()[eid]
+    clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+    inners = graph["linked_inners"].array()[eid]
+
+    return get_candidate_pairs_direct(clouds, inners, max_distance=max_distance)
+
