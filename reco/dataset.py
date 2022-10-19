@@ -7,8 +7,8 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs, get_candidate_pairs_direct, remap_tracksters
-from .matching import match_best_simtrackster_direct, find_good_pairs
+from .event import get_bary, get_candidate_pairs_direct, remap_tracksters
+from .matching import match_best_simtrackster_direct, find_good_pairs_direct
 from .distance import euclidian_distance
 
 from .graphs import get_graphs, create_graph
@@ -270,12 +270,16 @@ class TracksterPairs(Dataset):
                 raw_energy = tracksters["raw_energy"].array()[eid]
                 raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
 
-                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+                sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
                 sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
                 inners = graph["linked_inners"].array()[eid]
 
                 clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-                candidate_pairs, dst_map = get_candidate_pairs_direct(clouds, inners, max_distance=self.MAX_DISTANCE)
+                candidate_pairs, dst_map = get_candidate_pairs_direct(
+                    clouds,
+                    inners,
+                    max_distance=self.MAX_DISTANCE
+                )
 
                 if len(candidate_pairs) == 0:
                     continue
@@ -284,7 +288,7 @@ class TracksterPairs(Dataset):
                     raw_energy,
                     raw_st_energy,
                     _pairwise_func(clouds),
-                    sim2reco_indexes,
+                    sim2reco_indices,
                     sim2reco_shared_energy,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
@@ -297,7 +301,12 @@ class TracksterPairs(Dataset):
 
                 matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
                 not_matches = c_pairs - matches
-                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
+                neutral = find_good_pairs_direct(
+                    sim2reco_indices,
+                    sim2reco_shared_energy.
+                    raw_energy,
+                    not_matches
+                )
 
                 if self.balanced:
                     # crucial step to get right!
@@ -588,7 +597,7 @@ class PointCloudPairs(Dataset):
                 raw_energy = tracksters["raw_energy"].array()[eid]
                 raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
 
-                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+                sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
                 sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
                 inners = graph["linked_inners"].array()[eid]
 
@@ -602,7 +611,7 @@ class PointCloudPairs(Dataset):
                     raw_energy,
                     raw_st_energy,
                     _pairwise_func(clouds),
-                    sim2reco_indexes,
+                    sim2reco_indices,
                     sim2reco_shared_energy,
                     energy_threshold=self.ENERGY_THRESHOLD,
                     distance_threshold=self.MAX_DISTANCE,
@@ -615,7 +624,12 @@ class PointCloudPairs(Dataset):
 
                 matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
                 not_matches = c_pairs - matches
-                neutral = find_good_pairs(tracksters, associations, not_matches, eid)
+                neutral = find_good_pairs_direct(
+                    sim2reco_indices,
+                    sim2reco_shared_energy,
+                    raw_energy,
+                    not_matches
+                )
 
                 if self.balanced:
                     # crucial step to get right!

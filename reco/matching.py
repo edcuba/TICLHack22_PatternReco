@@ -111,8 +111,13 @@ def match_best_simtrackster(tracksters, associations, eid):
     return match_best_simtrackster_direct(raw_energy, s2ri, s2r_SE)
 
 
-
-def find_good_pairs(tracksters, associations, pair_list, eid, confidence_threshold=0.5):
+def find_good_pairs_direct(
+    sim2reco_indices,
+    sim2reco_shared_energy,
+    raw_energy,
+    pair_list,
+    confidence_threshold=0.5,
+):
     """
         Take a pair list
         Return pairs that are coming from the same particle
@@ -121,18 +126,10 @@ def find_good_pairs(tracksters, associations, pair_list, eid, confidence_thresho
         - running this on a list of candidate pairs should return all good pairs
         - but there is a large discrepancy between the output of this and ground truth method
     """
-
-    # get the raw energy of reco and sim tracksters
-    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
-
-    # get the shared energy mapping
-    s2ri = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
-    s2r_SE = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
-
     pair_set = set(pair_list)
     good_pairs = []
 
-    for st_i, reco_indexes, shared_energies in zip(range(len(s2ri)), s2ri, s2r_SE):
+    for st_i, (reco_indexes, shared_energies) in enumerate(zip(sim2reco_indices, sim2reco_shared_energy)):
         for rt_i, sh_e in zip(reco_indexes, shared_energies):
             rt_e = raw_energy[rt_i]
             fraction = sh_e / rt_e
@@ -145,6 +142,24 @@ def find_good_pairs(tracksters, associations, pair_list, eid, confidence_thresho
                     good_pairs.append(ba)
 
     return set(good_pairs)
+
+
+
+def find_good_pairs(tracksters, associations, pair_list, eid, confidence_threshold=0.5):
+    # get the raw energy of reco and sim tracksters
+    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
+
+    # get the shared energy mapping
+    sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
+    sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+
+    return find_good_pairs_direct(
+        sim2reco_indices,
+        sim2reco_shared_energy,
+        raw_energy,
+        pair_list,
+        confidence_threshold=confidence_threshold,
+    )
 
 
 def split_on_shared_energy(tracksters, simtracksters, h_frac, event_eids, complete_threshold=0.5, histogram=False):
