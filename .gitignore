@@ -6,3 +6,5 @@ data
 figures
 __pycache__
 runs
+logs
+models

@@ -1,3 +1,4 @@
+import sys
 import torch
 import uproot
 import random
@@ -303,7 +304,7 @@ class TracksterPairs(Dataset):
                 not_matches = c_pairs - matches
                 neutral = find_good_pairs_direct(
                     sim2reco_indices,
-                    sim2reco_shared_energy.
+                    sim2reco_shared_energy,
                     raw_energy,
                     not_matches
                 )
@@ -402,7 +403,7 @@ class TracksterGraph(InMemoryDataset):
         data_list = []
 
         for source in self.raw_file_names:
-            print(source)
+            print(source, file=sys.stderr)
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
             simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})

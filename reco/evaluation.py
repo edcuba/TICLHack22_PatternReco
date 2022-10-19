@@ -2,6 +2,10 @@ import torch
 import numpy as np
 import awkward as ak
 
+from torch_geometric.data import Data
+
+
+from .graphs import create_graph
 from .energy import get_energy_map
 from .dataset import get_ground_truth, get_pair_tensor_builder
 from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
@@ -192,16 +196,22 @@ def pairwise_model_evaluation(
     max_distance=10,
     energy_threshold=10,
     max_events=100,
+    reco_to_target=False,
 ):
+    """
+    Evaluation must be unbalanced
+    """
     nt = tracksters["NTracksters"].array()
     model.eval()
 
     results = {
         "clue3d_to_sim": [],
         "target_to_sim": [],
-        "reco_to_target": [],
         "reco_to_sim": []
     }
+    
+    if reco_to_target:
+        results["reco_to_target"] = []
 
     for eid in range(min([len(nt), max_events])):
         # get candidate pairs
@@ -211,6 +221,11 @@ def pairwise_model_evaluation(
             eid,
             max_distance=max_distance,
         )
+        
+        if len(candidate_pairs) == 0:
+            print("skipping: no candidates")
+            continue
+        
         builder = get_pair_tensor_builder(tracksters, eid, dst_map)
 
         # get target
@@ -234,6 +249,131 @@ def pairwise_model_evaluation(
         # predict edges
         preds = model(samples)
         out = (preds.reshape(1,-1)[0].detach().numpy() > decision_th)
+
+        # map decisions
+        # !must be little -> big
+        # some tracksters happen to both on left and right here
+        re = tracksters["raw_energy"].array()[eid]
+        merge_map = {
+            a: b for (a, b), o in zip(candidate_pairs, out)
+            if o and re[a] < energy_threshold and re[b] > energy_threshold
+        }
+
+        # rebuild the event
+        reco = remap_tracksters(tracksters, merge_map, eid)
+
+        # reco
+        re = reco["vertices_energy"]
+        ri = reco["vertices_indexes"]
+        rm = reco["vertices_multiplicity"]
+
+        # target
+        te = gt["vertices_energy"]
+        ti = gt["vertices_indexes"]
+        tm = gt["vertices_multiplicity"]
+
+        # clue3D
+        ce = tracksters["vertices_energy"].array()[eid]
+        ci = tracksters["vertices_indexes"].array()[eid]
+        cm = tracksters["vertices_multiplicity"].array()[eid]
+
+        # simulation
+        se = simtracksters["stsSC_vertices_energy"].array()[eid]
+        si = simtracksters["stsSC_vertices_indexes"].array()[eid]
+        sm = simtracksters["stsSC_vertices_multiplicity"].array()[eid]
+
+        results["clue3d_to_sim"].append(evaluate(ci, si, ce, se, cm, sm, noise=False))
+        results["target_to_sim"].append(evaluate(ti, si, te, se, tm, sm, noise=False))
+        
+        if reco_to_target:
+            results["reco_to_target"].append(evaluate(ri, ti, re, te, rm, tm, noise=False))
+            
+        results["reco_to_sim"].append(evaluate(ri, si, re, se, rm, sm, noise=False))
+
+        print(f"Event {eid}:")
+        for key, values in results.items():
+            vals = values[-1]
+            print(f"\t{key}:\tP: {vals[0]:.2f} R: {vals[1]:.2f} F: {vals[2]:.2f}")
+
+    print("-----")
+    for key, values in results.items():
+        avg_p = np.mean([x[0] for x in values])
+        avg_r = np.mean([x[1] for x in values])
+        avg_f = np.mean([x[2] for x in values])
+        print(f"mean {key}:\tP: {avg_p:.2f} R: {avg_r:.2f} F: {avg_f:.2f}")
+
+    return results
+
+
+def graph_model_evaluation(
+    tracksters,
+    simtracksters,
+    associations,
+    graphs,
+    model,
+    decision_th,
+    max_distance=10,
+    energy_threshold=10,
+    max_events=100,
+    include_graph_features=False,
+):
+    nt = tracksters["NTracksters"].array()
+    model.eval()
+
+    results = {
+        "clue3d_to_sim": [],
+        "target_to_sim": [],
+        "reco_to_target": [],
+        "reco_to_sim": []
+    }
+
+    for eid in range(min([len(nt), max_events])):
+        # get candidate pairs
+        candidate_pairs, dst_map = get_candidate_pairs(
+            tracksters,
+            graphs,
+            eid,
+            max_distance=max_distance,
+        )
+
+        # get target
+        gt = get_ground_truth(
+            tracksters,
+            simtracksters,
+            associations,
+            eid,
+            distance_threshold=max_distance,
+            energy_threshold=energy_threshold,
+        )
+        
+        ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
+        ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
+        c_pairs = set(candidate_pairs)
+
+        trackster_features = list([
+            tracksters[k].array()[eid] for k in FEATURE_KEYS
+        ])
+        
+        tx_list = []
+        for tx in range(len(ve)):
+            tx_features = [f[tx] for f in trackster_features]
+            if include_graph_features:
+                g = create_graph(vx[tx], vy[tx], vz[tx], ve[tx], vi[tx], N=2)
+                tx_features += get_graph_level_features(g)
+            tx_features += [len(ve[tx])]
+            tx_list.append(tx_features)
+            
+        sample = Data(
+            x=torch.tensor(tx_list),
+            edge_index=torch.tensor(candidate_pairs).T,
+        )
+        
+        transform = T.Compose([T.NormalizeFeatures()])
+        scaled = trasform(data)
+
+        # predict edges
+        preds = model(sample.x, sample.edge_index)
+        out = (preds.reshape(-1) > decision_th)
 
         # map decisions
         # !must be little -> big
