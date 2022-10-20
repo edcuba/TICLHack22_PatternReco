@@ -119,6 +119,27 @@ def remap_tracksters(tracksters, new_mapping, eid):
     return result
 
 
+def get_candidate_pairs_little_big(
+    clouds,
+    inners,
+    raw_energy,
+    max_distance=10,
+    energy_threshold=10
+):
+    dst_map = {}
+    candidate_pairs = []
+    for i, inners in enumerate(inners):
+        for inner in inners:
+            e_pair = (raw_energy[i], raw_energy[inner])
+            if min(e_pair) < energy_threshold and max(e_pair) > energy_threshold:
+                dst = euclidian_distance(clouds[i], clouds[inner])
+                if dst <= max_distance:
+                    pair = (i, inner) if e_pair[0] < e_pair[1] else (inner, i)
+                    candidate_pairs.append(pair)
+                    dst_map[pair] = dst
+    return candidate_pairs, dst_map
+
+
 def get_candidate_pairs_direct(clouds, inners, max_distance=10):
     candidate_pairs = []
     dst_map = {}

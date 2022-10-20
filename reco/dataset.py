@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs_direct, remap_tracksters
+from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big
 from .matching import match_best_simtrackster_direct, find_good_pairs_direct
 from .distance import euclidian_distance
 
@@ -192,8 +192,6 @@ class TracksterPairs(Dataset):
             root_dir,
             raw_data_path,
             transform=None,
-            balanced=False,
-            include_neutral=True,
             N_FILES=10,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
@@ -206,8 +204,6 @@ class TracksterPairs(Dataset):
 
         self.root_dir = root_dir
         self.transform = transform
-        self.balanced = balanced
-        self.include_neutral = include_neutral
 
         fn = self.processed_paths[0]
 
@@ -234,9 +230,7 @@ class TracksterPairs(Dataset):
             self.name,
             f"{self.N_FILES}f",
             f"d{self.MAX_DISTANCE}",
-            f"e{self.ENERGY_THRESHOLD}",
-            "bal" if self.balanced else "nbal",
-            "in" if self.include_neutral else "en",
+            f"e{self.ENERGY_THRESHOLD}"
         ]
         return list([f"pairs_{'_'.join(infos)}.pt"])
 
@@ -258,7 +252,6 @@ class TracksterPairs(Dataset):
             print(f"Processing: {source}")
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
-            simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
             associations = uproot.open({source: "ticlNtuplizer/associations"})
             graph = uproot.open({source: "ticlNtuplizer/graph"})
 
@@ -267,62 +260,38 @@ class TracksterPairs(Dataset):
                 vx = tracksters["vertices_x"].array()[eid]
                 vy = tracksters["vertices_y"].array()[eid]
                 vz = tracksters["vertices_z"].array()[eid]
+                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
 
                 raw_energy = tracksters["raw_energy"].array()[eid]
-                raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
-
                 sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
                 sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
                 inners = graph["linked_inners"].array()[eid]
 
-                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-                candidate_pairs, dst_map = get_candidate_pairs_direct(
+                candidate_pairs, dst_map = get_candidate_pairs_little_big(
                     clouds,
                     inners,
-                    max_distance=self.MAX_DISTANCE
+                    raw_energy,
+                    max_distance=self.MAX_DISTANCE,
+                    energy_threshold=self.ENERGY_THRESHOLD,
                 )
 
                 if len(candidate_pairs) == 0:
                     continue
 
-                gt_pairs = match_trackster_pairs_direct(
-                    raw_energy,
-                    raw_st_energy,
-                    _pairwise_func(clouds),
-                    sim2reco_indices,
-                    sim2reco_shared_energy,
-                    energy_threshold=self.ENERGY_THRESHOLD,
-                    distance_threshold=self.MAX_DISTANCE,
-                    best_only=False,
-                )
-
-                ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
-                ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
                 c_pairs = set(candidate_pairs)
 
-                matches = ab_pairs.union(ba_pairs).intersection(c_pairs)
-                not_matches = c_pairs - matches
-                neutral = find_good_pairs_direct(
+                matches = find_good_pairs_direct(
                     sim2reco_indices,
                     sim2reco_shared_energy,
                     raw_energy,
-                    not_matches
+                    c_pairs,
                 )
 
-                if self.balanced:
-                    # crucial step to get right!
-                    take = min(len(matches), len(not_matches) - len(neutral))
-                    positive = random.sample(list(matches), k=take)
-                    negative = random.sample(list(not_matches - neutral), k=take)
-                else:
-                    positive = matches
-                    negative = not_matches - neutral
+                positive = matches
+                negative = c_pairs - positive
 
                 builder = get_pair_tensor_builder(tracksters, eid, dst_map)
-
                 labels = [(positive, 1), (negative, 0)]
-                if self.include_neutral:
-                    labels.append((neutral, 0.5))
 
                 for edges, label in labels:
                     for edge in edges:
@@ -341,7 +310,6 @@ class TracksterPairs(Dataset):
     def __repr__(self):
         infos = [
             f"len={len(self)}",
-            f"balanced={self.balanced}",
             f"max_distance={self.MAX_DISTANCE}",
             f"energy_threshold={self.ENERGY_THRESHOLD}"
         ]
@@ -406,7 +374,6 @@ class TracksterGraph(InMemoryDataset):
             print(source, file=sys.stderr)
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
-            simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
             associations = uproot.open({source: "ticlNtuplizer/associations"})
             graph = uproot.open({source: "ticlNtuplizer/graph"})
 
@@ -416,36 +383,30 @@ class TracksterGraph(InMemoryDataset):
                 vz = tracksters["vertices_z"].array()[eid]
                 ve = tracksters["vertices_energy"].array()[eid]
                 vi = tracksters["vertices_indexes"].array()[eid]
+                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
 
                 raw_energy = tracksters["raw_energy"].array()[eid]
-                raw_st_energy = simtracksters["stsSC_raw_energy"].array()[eid]
+                sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
 
-                sim2reco_indexes = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
                 sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
                 inners = graph["linked_inners"].array()[eid]
 
-                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-                candidate_pairs, _ = get_candidate_pairs_direct(clouds, inners, max_distance=self.MAX_DISTANCE)
+                # Maybe candidate edges should be nearest higher rather than linked_inners
+                candidate_pairs, _ = get_candidate_pairs_direct(
+                    clouds,
+                    inners,
+                    max_distance=self.MAX_DISTANCE,
+                )
 
                 if len(candidate_pairs) == 0:
                     continue
 
-                gt_pairs = match_trackster_pairs_direct(
-                    raw_energy,
-                    raw_st_energy,
-                    _pairwise_func(clouds),
-                    sim2reco_indexes,
+                positive = find_good_pairs_direct(
+                    sim2reco_indices,
                     sim2reco_shared_energy,
-                    energy_threshold=self.ENERGY_THRESHOLD,
-                    distance_threshold=self.MAX_DISTANCE,
-                    best_only=False,
+                    raw_energy,
+                    candidate_pairs,
                 )
-
-                ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
-                ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
-                c_pairs = set(candidate_pairs)
-
-                positive = ab_pairs.union(ba_pairs).intersection(c_pairs)
 
                 trackster_features = list([
                     tracksters[k].array()[eid] for k in FEATURE_KEYS

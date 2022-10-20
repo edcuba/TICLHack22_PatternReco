@@ -89,6 +89,9 @@ def match_best_simtrackster_direct(
     for st_i, reco_indexes, shared_energies in zip(range(len(s2ri)), s2ri, s2r_SE):
         for rt_i, sh_e in zip(reco_indexes, shared_energies):
             rt_e = raw_energy[rt_i]
+
+            # fraction is the part of shared energy in relation to the trackster energy
+            # returns the fraction of the trackster that is shared with the simtrackster
             fraction = sh_e / rt_e
             if fraction > reco_fr[rt_i]:
                 reco_fr[rt_i] = fraction
@@ -121,25 +124,18 @@ def find_good_pairs_direct(
     """
         Take a pair list
         Return pairs that are coming from the same particle
-
-        XXX: this seems to be buggy
-        - running this on a list of candidate pairs should return all good pairs
-        - but there is a large discrepancy between the output of this and ground truth method
     """
-    pair_set = set(pair_list)
     good_pairs = []
 
-    for st_i, (reco_indexes, shared_energies) in enumerate(zip(sim2reco_indices, sim2reco_shared_energy)):
-        for rt_i, sh_e in zip(reco_indexes, shared_energies):
-            rt_e = raw_energy[rt_i]
-            fraction = sh_e / rt_e
-            if fraction > confidence_threshold:
-                ab = (st_i, rt_i)
-                ba = (rt_i, st_i)
-                if ab in pair_set:
-                    good_pairs.append(ab)
-                elif ba in pair_set:
-                    good_pairs.append(ba)
+    reco_fr, reco_st = match_best_simtrackster_direct(
+        raw_energy,
+        sim2reco_indices,
+        sim2reco_shared_energy,
+    )
+
+    for (a, b) in pair_list:
+        if reco_st[a] == reco_st[b] and reco_fr[a] >= confidence_threshold and reco_fr[b] >= confidence_threshold:
+            good_pairs.append((a, b))
 
     return set(good_pairs)
 
@@ -147,11 +143,11 @@ def find_good_pairs_direct(
 
 def find_good_pairs(tracksters, associations, pair_list, eid, confidence_threshold=0.5):
     # get the raw energy of reco and sim tracksters
-    raw_energy = np.array(tracksters["raw_energy"].array()[eid])
+    raw_energy = tracksters["raw_energy"].array()[eid]
 
     # get the shared energy mapping
-    sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
-    sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
+    sim2reco_indices = associations["tsCLUE3D_simToReco_SC"].array()[eid]
+    sim2reco_shared_energy = associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid]
 
     return find_good_pairs_direct(
         sim2reco_indices,

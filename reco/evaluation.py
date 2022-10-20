@@ -3,13 +3,14 @@ import numpy as np
 import awkward as ak
 
 from torch_geometric.data import Data
+import torch_geometric.transforms as T
 
 
 from .graphs import create_graph
 from .energy import get_energy_map
-from .dataset import get_ground_truth, get_pair_tensor_builder
+from .dataset import FEATURE_KEYS, get_ground_truth, get_pair_tensor_builder
 from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
-
+from .features import get_graph_level_features
 
 
 def f_score(precision, recall, beta=1):
@@ -209,7 +210,7 @@ def pairwise_model_evaluation(
         "target_to_sim": [],
         "reco_to_sim": []
     }
-    
+
     if reco_to_target:
         results["reco_to_target"] = []
 
@@ -221,11 +222,11 @@ def pairwise_model_evaluation(
             eid,
             max_distance=max_distance,
         )
-        
+
         if len(candidate_pairs) == 0:
             print("skipping: no candidates")
             continue
-        
+
         builder = get_pair_tensor_builder(tracksters, eid, dst_map)
 
         # get target
@@ -284,10 +285,10 @@ def pairwise_model_evaluation(
 
         results["clue3d_to_sim"].append(evaluate(ci, si, ce, se, cm, sm, noise=False))
         results["target_to_sim"].append(evaluate(ti, si, te, se, tm, sm, noise=False))
-        
+
         if reco_to_target:
             results["reco_to_target"].append(evaluate(ri, ti, re, te, rm, tm, noise=False))
-            
+
         results["reco_to_sim"].append(evaluate(ri, si, re, se, rm, sm, noise=False))
 
         print(f"Event {eid}:")
@@ -328,8 +329,17 @@ def graph_model_evaluation(
     }
 
     for eid in range(min([len(nt), max_events])):
+
+        # clue3D
+        cx = tracksters["vertices_x"].array()[eid]
+        cy = tracksters["vertices_y"].array()[eid]
+        cz = tracksters["vertices_z"].array()[eid]
+        ce = tracksters["vertices_energy"].array()[eid]
+        ci = tracksters["vertices_indexes"].array()[eid]
+        cm = tracksters["vertices_multiplicity"].array()[eid]
+
         # get candidate pairs
-        candidate_pairs, dst_map = get_candidate_pairs(
+        candidate_pairs, _ = get_candidate_pairs(
             tracksters,
             graphs,
             eid,
@@ -345,31 +355,27 @@ def graph_model_evaluation(
             distance_threshold=max_distance,
             energy_threshold=energy_threshold,
         )
-        
-        ab_pairs = set([(a, b) for a, b, _ in gt_pairs])
-        ba_pairs = set([(b, a) for a, b, _ in gt_pairs])
-        c_pairs = set(candidate_pairs)
 
         trackster_features = list([
             tracksters[k].array()[eid] for k in FEATURE_KEYS
         ])
-        
+
         tx_list = []
-        for tx in range(len(ve)):
+        for tx in range(len(ce)):
             tx_features = [f[tx] for f in trackster_features]
             if include_graph_features:
-                g = create_graph(vx[tx], vy[tx], vz[tx], ve[tx], vi[tx], N=2)
+                g = create_graph(cx[tx], cy[tx], cz[tx], ce[tx], ci[tx], N=2)
                 tx_features += get_graph_level_features(g)
-            tx_features += [len(ve[tx])]
+            tx_features += [len(ce[tx])]
             tx_list.append(tx_features)
-            
-        sample = Data(
+
+        data = Data(
             x=torch.tensor(tx_list),
             edge_index=torch.tensor(candidate_pairs).T,
         )
-        
+
         transform = T.Compose([T.NormalizeFeatures()])
-        scaled = trasform(data)
+        sample = transform(data)
 
         # predict edges
         preds = model(sample.x, sample.edge_index)
@@ -396,11 +402,6 @@ def graph_model_evaluation(
         te = gt["vertices_energy"]
         ti = gt["vertices_indexes"]
         tm = gt["vertices_multiplicity"]
-
-        # clue3D
-        ce = tracksters["vertices_energy"].array()[eid]
-        ci = tracksters["vertices_indexes"].array()[eid]
-        cm = tracksters["vertices_multiplicity"].array()[eid]
 
         # simulation
         se = simtracksters["stsSC_vertices_energy"].array()[eid]
