@@ -105,9 +105,10 @@ def remap_tracksters(tracksters, new_mapping, eid):
         new_big_idx = new_idx_map[big]
         new_tracksters[new_big_idx].append(little)
 
+    datalist = list(tracksters[k].array()[eid] for k in ARRAYS)
     result = {
-        k: ak.Array([ak.flatten(tracksters[k].array()[eid][tlist]) for tlist in new_tracksters])
-        for k in ARRAYS
+        k: ak.Array([ak.flatten(datalist[i][tlist]) for tlist in new_tracksters])
+        for i, k in enumerate(ARRAYS)
     }
 
     # recompute barycentres

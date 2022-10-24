@@ -44,7 +44,17 @@ def get_eid_splits(tracksters, simtracksters, associations, match_threshold=0.2)
 
 
 def get_highest_energy_fraction_simtracksters(tracksters, simtracksters, associations, eid):
-    # returns fraction of simtrackster the reco trackster makes up
+    """
+    Get highest energy fraction simtracksters:
+        Get Simtrackster of which the reco trackster
+        makes up most of the energy.
+
+    For each reco trackster:
+        return highest fraction of simtrackster the reco trackster makes up
+
+    See also: match_best_simtrackster
+    """
+
     num_rec_t = tracksters["NTracksters"].array()[eid]
 
     # get the raw energy of reco and sim tracksters
@@ -103,7 +113,15 @@ def match_best_simtrackster_direct(
 
 def match_best_simtrackster(tracksters, associations, eid):
     """
-        returns fraction of recotrackster belonging to the simtrackster
+    Match best simtrackster:
+        Find the simtrackster that makes up most
+        of the reco trackster energy.
+
+    For each reco trackster:
+        return the simtrackster that makes up
+        the most of the reco trackster and the fraction
+
+    See also: get_highest_energy_fraction_simtracksters
     """
     # get the raw energy of reco and sim tracksters
     raw_energy = np.array(tracksters["raw_energy"].array()[eid])
