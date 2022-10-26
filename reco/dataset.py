@@ -335,12 +335,14 @@ class TracksterGraph(InMemoryDataset):
             transform=None,
             pre_transform=None,
             pre_filter=None,
-            N_FILES=10,
+            N_FILES=None,
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
             include_graph_features=False,
+            z_map=None,
         ):
         self.name = name
+        self.z_map = z_map
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE
         self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
@@ -358,14 +360,15 @@ class TracksterGraph(InMemoryDataset):
             files.extend(filenames)
             break
         full_paths = list([path.join(self.raw_data_path, f) for f in files])
-        assert len(full_paths) >= self.N_FILES
+        if self.N_FILES:
+            assert len(full_paths) >= self.N_FILES
         return full_paths[:self.N_FILES]
 
     @property
     def processed_file_names(self):
         infos = [
             self.name,
-            f"{self.N_FILES}f",
+            f"{len(self.raw_file_names)}f",
             f"d{self.MAX_DISTANCE}",
             f"e{self.ENERGY_THRESHOLD}",
             "gf" if self.include_graph_features else "ngf",
@@ -392,7 +395,11 @@ class TracksterGraph(InMemoryDataset):
                 vz = tracksters["vertices_z"].array()[eid]
                 ve = tracksters["vertices_energy"].array()[eid]
                 vi = tracksters["vertices_indexes"].array()[eid]
-                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
+
+                clouds = [
+                    np.array([vx[tid], vy[tid], apply_map(vz[tid], self.z_map, factor=2)]).T
+                    for tid in range(len(vx))
+                ]
 
                 raw_energy = tracksters["raw_energy"].array()[eid]
                 sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
