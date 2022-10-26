@@ -158,7 +158,7 @@ def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions)
     ax.hist(incomplete_fractions, bins=20)
 
 
-def plot_graph_3D(G, color, ax=None, edges=True):
+def plot_graph_3D(G, color, ax=None, edges=True, s=30):
     # Get node positions
     pos = nx.get_node_attributes(G, 'pos')
 
@@ -179,9 +179,9 @@ def plot_graph_3D(G, color, ax=None, edges=True):
             zi.append(value[2])
 
         if isinstance(color, str):
-            ax.scatter(xi, yi, zi, s=30, c=color)
+            ax.scatter(xi, yi, zi, s=s, c=color)
         else:
-            ax.scatter(xi, yi, zi, s=30, c=color, cmap='rainbow')
+            ax.scatter(xi, yi, zi, s=s, c=color, cmap='rainbow')
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted
@@ -193,6 +193,7 @@ def plot_graph_3D(G, color, ax=None, edges=True):
 
                 # Plot the connecting lines
                 ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.5)
+    if ax == None:
         plt.show()
 
 
