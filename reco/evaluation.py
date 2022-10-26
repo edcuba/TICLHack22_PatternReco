@@ -198,6 +198,7 @@ def pairwise_model_evaluation(
     energy_threshold=10,
     max_events=100,
     reco_to_target=False,
+    z_map=None,
 ):
     """
     Evaluation must be unbalanced
@@ -221,6 +222,7 @@ def pairwise_model_evaluation(
             graphs,
             eid,
             max_distance=max_distance,
+            z_map=z_map
         )
 
         if len(candidate_pairs) == 0:

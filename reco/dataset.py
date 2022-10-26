@@ -10,7 +10,7 @@ from torch_geometric.data import Data, InMemoryDataset
 
 from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big
 from .matching import match_best_simtrackster_direct, find_good_pairs_direct
-from .distance import euclidian_distance
+from .distance import euclidian_distance, apply_map
 
 from .graphs import get_graphs, create_graph
 from .features import get_graph_level_features
@@ -94,6 +94,7 @@ def match_trackster_pairs(
     distance_threshold=10,
     confidence_threshold=0.5,
     best_only=True,
+    z_map=None
 ):
     raw_e = tracksters["raw_energy"].array()[eid]
     raw_st = simtracksters["stsSC_raw_energy"].array()[eid]
@@ -106,10 +107,16 @@ def match_trackster_pairs(
         vx = tracksters["vertices_x"].array()[eid]
         vy = tracksters["vertices_y"].array()[eid]
         vz = tracksters["vertices_z"].array()[eid]
-        clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(raw_e))]
+        clouds = [
+            np.array([
+                vx[tid],
+                vy[tid],
+                apply_map(vz[tid], z_map, factor=2)
+            ]).T for tid in range(len(raw_e))
+        ]
         dst_func = _pairwise_func(clouds)
     elif distance_type == "bary":
-        bary = get_bary(tracksters, eid)
+        bary = get_bary(tracksters, eid, z_map=z_map)
         dst_func = _bary_func(bary)
     else:
         raise RuntimeError("Distance type '%s' not supported", distance_type)
@@ -135,7 +142,8 @@ def get_ground_truth(
         energy_threshold=10,
         distance_type="pairwise",
         distance_threshold=10,
-        confidence_threshold=0.5
+        confidence_threshold=0.5,
+        z_map=None
     ):
 
     e_pairs = match_trackster_pairs(
@@ -146,7 +154,8 @@ def get_ground_truth(
         energy_threshold=energy_threshold,
         distance_type=distance_type,
         distance_threshold=distance_threshold,
-        confidence_threshold=confidence_threshold
+        confidence_threshold=confidence_threshold,
+        z_map=z_map,
     )
 
     merge_map = {little: big for little, big, _ in e_pairs}
