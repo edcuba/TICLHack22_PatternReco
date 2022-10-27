@@ -141,13 +141,13 @@ def get_candidate_pairs_little_big(
     return candidate_pairs, dst_map
 
 
-def get_candidate_pairs_direct(clouds, inners, max_distance=10):
+def get_candidate_pairs_direct(coordinates, inners, max_distance=10):
     candidate_pairs = []
     dst_map = {}
 
     for i, inners in enumerate(inners):
         for inner in inners:
-            dst = euclidian_distance(clouds[i], clouds[inner])
+            dst = euclidian_distance(coordinates[i], coordinates[inner])
             if dst <= max_distance:
                 candidate_pairs.append((i, inner))
                 dst_map[(i, inner)] = dst
