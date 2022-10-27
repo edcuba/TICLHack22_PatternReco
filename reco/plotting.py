@@ -73,13 +73,13 @@ def plot_sim_reco(
 
     xlim, ylim, zlim = get_event_window(svx, svy, svz, sve, zoom=zoom)
 
-    ax = fig.add_subplot(122, projection='3d')
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.set_zlim(zlim)
-    ax.set_xlabel("x (cm)")
-    ax.set_ylabel("y (cm)")
-    ax.set_zlabel("z (cm)")
+    ax2 = fig.add_subplot(122, projection='3d')
+    ax2.set_xlim(xlim)
+    ax2.set_ylim(ylim)
+    ax2.set_zlim(zlim)
+    ax2.set_xlabel("x (cm)")
+    ax2.set_ylabel("y (cm)")
+    ax2.set_zlabel("z (cm)")
 
     # keep only the lowest multiplicity per vertex
     plot_set = {}
@@ -102,26 +102,28 @@ def plot_sim_reco(
             _ty.append(y)
             _tz.append(z)
             _te.append(e)
-        plot_trackster(ax, ti, _tx, _ty, _tz, _te)
+        plot_trackster(ax2, ti, _tx, _ty, _tz, _te)
 
-    ax.set_title(f"Simulation layer-clusters ({len(svx)})")
+    ax2.set_title(f"Simulation layer-clusters ({len(svx)})")
 
     if legend:
-        ax.legend()
+        ax2.legend()
 
     # plot reco
     if not align_dim:
         xlim, ylim, zlim = get_event_window(vx, vy, vz, ve, zoom=zoom)
 
-    ax = fig.add_subplot(121, projection='3d')
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.set_zlim(zlim)
-    plot_tracksters(ax, vx, vy, vz, ve)
+    ax1 = fig.add_subplot(121, projection='3d')
+    ax1.set_xlim(xlim)
+    ax1.set_ylim(ylim)
+    ax1.set_zlim(zlim)
+    plot_tracksters(ax1, vx, vy, vz, ve)
 
-    ax.set_title(f"Reconstruction layer-clusters ({len(vx)})")
+    ax1.set_title(f"Reconstruction layer-clusters ({len(vx)})")
     if legend:
-        ax.legend()
+        ax1.legend()
+
+    return ax1, ax2
 
 
 

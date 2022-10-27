@@ -3,8 +3,8 @@ ve
 .ipynb_checkpoints
 .DS_Store
 data
-figures
 __pycache__
 runs
 logs
 models
+figures-devel
