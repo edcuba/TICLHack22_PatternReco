@@ -16,7 +16,7 @@ def train_edge_pred(model, device, optimizer, loss_func, train_dl):
 
         optimizer.zero_grad()
 
-        seg_pred = model(data.x, data.edge_index)
+        seg_pred = model(data.x, data.edge_index, data.trackster_index)
         loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 
         loss.backward()
@@ -48,7 +48,7 @@ def test_edge_pred(model, device, loss_func, test_dl):
         batch_size = len(data)
         data = data.to(device)
 
-        seg_pred = model(data.x, data.edge_index)
+        seg_pred = model(data.x, data.edge_index, data.trackster_index)
 
         loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 

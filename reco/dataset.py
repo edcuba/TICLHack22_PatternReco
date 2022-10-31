@@ -3,12 +3,13 @@ import torch
 import uproot
 import random
 import numpy as np
+import awkward as ak
 from os import walk, path
 from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big
+from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big, get_candidate_pairs_little_big_planear
 from .matching import match_best_simtrackster_direct, find_good_pairs_direct
 from .distance import euclidian_distance, apply_map
 
@@ -633,3 +634,135 @@ class PointCloudPairs(Dataset):
                         dataset_X2.append(x2)
                         dataset_Y.append(label)
         torch.save((dataset_X1, dataset_X2, dataset_Y), self.processed_paths[0])
+
+
+
+class PointCloudSet(InMemoryDataset):
+
+    def __init__(
+            self,
+            name,
+            root_dir,
+            raw_data_path,
+            transform=None,
+            pre_transform=None,
+            pre_filter=None,
+            N_FILES=None,
+            MAX_DISTANCE=10,
+            ENERGY_THRESHOLD=10,
+        ):
+        self.name = name
+        self.N_FILES = N_FILES
+        self.MAX_DISTANCE = MAX_DISTANCE
+        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
+        self.raw_data_path = raw_data_path
+        self.root_dir = root_dir
+
+        super(PointCloudSet, self).__init__(root_dir, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self):
+        files = []
+        for (_, _, filenames) in walk(self.raw_data_path):
+            files.extend(filenames)
+            break
+        full_paths = list([path.join(self.raw_data_path, f) for f in files])
+        if self.N_FILES:
+            assert len(full_paths) >= self.N_FILES
+        return full_paths[:self.N_FILES]
+
+    @property
+    def processed_file_names(self):
+        infos = [
+            self.name,
+            f"{len(self.raw_file_names)}f",
+            f"d{self.MAX_DISTANCE}",
+            f"e{self.ENERGY_THRESHOLD}",
+        ]
+        return list([f"lc_point_cloud_{'_'.join(infos)}.pt"])
+
+    @property
+    def processed_paths(self):
+        return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
+
+    def process(self):
+        data_list = []
+
+        for source in self.raw_file_names:
+            print(source, file=sys.stderr)
+            tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
+            associations = uproot.open({source: "ticlNtuplizer/associations"})
+            graph = uproot.open({source: "ticlNtuplizer/graph"})
+
+            vx_e = tracksters["vertices_x"].array()
+            vy_e = tracksters["vertices_y"].array()
+            vz_e = tracksters["vertices_z"].array()
+            ve_e = tracksters["vertices_energy"].array()
+            re_e = tracksters["raw_energy"].array()
+            li_e = graph["linked_inners"].array()
+            sim2reco_indices_e = associations["tsCLUE3D_simToReco_SC"].array()
+            sim2reco_shared_energy_e = associations["tsCLUE3D_simToReco_SC_sharedE"].array()
+
+
+            z_set = set(ak.flatten(vz_e, axis=None))
+            z_list = list(sorted(z_set))
+            z_map = {z: i for i, z in enumerate(z_list)}
+
+            overlap = 1
+
+            for eid in range(len(vx_e)):
+                # get event data
+                vx, vy, vz, ve = vx_e[eid], vy_e[eid], vz_e[eid], ve_e[eid]
+                raw_energy, inners = re_e[eid], li_e[eid]
+                sim2reco_indices, sim2reco_shared_energy  = sim2reco_indices_e[eid], sim2reco_shared_energy_e[eid]
+
+                # compute coordinate clouds and layer ranges
+                xy_clouds = [np.array((x, x)).T for x, y in zip(vx, vy)]
+                layers = [apply_map(list(set(z.tolist())), z_map) for z in vz]
+                ranges = [(min(x) - overlap, max(x) + overlap) for x in layers]
+
+                # find edge candidates
+                candidate_pairs = get_candidate_pairs_little_big_planear(
+                    xy_clouds,
+                    ranges,
+                    inners,
+                    raw_energy,
+                    max_distance=self.MAX_DISTANCE,
+                    energy_threshold=self.ENERGY_THRESHOLD,
+                )
+
+                if len(candidate_pairs) == 0:
+                    continue
+
+                positive = find_good_pairs_direct(
+                    sim2reco_indices,
+                    sim2reco_shared_energy,
+                    raw_energy,
+                    candidate_pairs,
+                )
+
+                e_clouds = np.concatenate([
+                    np.array([[tid] * len(vx[tid]), vx[tid], vy[tid], vz[tid], ve[tid]]).T
+                    for tid in range(len(vx))
+                ])
+
+                data_list.append(Data(
+                    x=torch.tensor(e_clouds[:,1:], dtype=torch.float),
+                    trackster_index=torch.tensor(e_clouds[:,0], dtype=torch.int64),
+                    edge_index=torch.tensor(candidate_pairs).T,
+                    y=torch.tensor(list(int(cp in positive) for cp in candidate_pairs))
+                ))
+
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), self.processed_paths[0])
+
+    def __repr__(self):
+        infos = [
+            f"graphs={len(self)}",
+            f"nodes={len(self.data.x)}",
+            f"edges={len(self.data.y)}",
+            f"max_distance={self.MAX_DISTANCE}",
+            f"energy_threshold={self.ENERGY_THRESHOLD}",
+        ]
+        return f"PointCloudSet({', '.join(infos)})"

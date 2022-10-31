@@ -141,6 +141,29 @@ def get_candidate_pairs_little_big(
     return candidate_pairs, dst_map
 
 
+def get_candidate_pairs_little_big_planear(
+    xy_cloud,
+    layers_range,
+    inners,
+    raw_energy,
+    max_distance=10,
+    energy_threshold=10,
+):
+    candidate_pairs = []
+    for i, inners in enumerate(inners):
+        for inner in inners:
+            e_pair = (raw_energy[i], raw_energy[inner])
+            l_range1 = layers_range[i]
+            l_range2 = layers_range[inner]
+            l_distance = max((l_range1[0], l_range2[0])) - min((l_range1[1], l_range2[1]))
+            if min(e_pair) < energy_threshold and max(e_pair) > energy_threshold and l_distance < 0:
+                dst = euclidian_distance(xy_cloud[i], xy_cloud[inner])
+                if dst <= max_distance:
+                    pair = (i, inner) if e_pair[0] < e_pair[1] else (inner, i)
+                    candidate_pairs.append(pair)
+    return candidate_pairs
+
+
 def get_candidate_pairs_direct(coordinates, inners, max_distance=10):
     candidate_pairs = []
     dst_map = {}
