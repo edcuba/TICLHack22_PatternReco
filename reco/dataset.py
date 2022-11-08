@@ -668,15 +668,13 @@ class PointCloudSet(InMemoryDataset):
             files.extend(filenames)
             break
         full_paths = list([path.join(self.raw_data_path, f) for f in files])
-        if self.N_FILES:
-            assert len(full_paths) >= self.N_FILES
         return full_paths[:self.N_FILES]
 
     @property
     def processed_file_names(self):
         infos = [
             self.name,
-            f"{len(self.raw_file_names)}f",
+            f"{self.N_FILES}f",
             f"d{self.MAX_DISTANCE}",
             f"e{self.ENERGY_THRESHOLD}",
         ]
@@ -688,6 +686,9 @@ class PointCloudSet(InMemoryDataset):
 
     def process(self):
         data_list = []
+
+        if self.N_FILES:
+            assert len(self.raw_file_names) == self.N_FILES
 
         for source in self.raw_file_names:
             print(source, file=sys.stderr)
