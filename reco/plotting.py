@@ -65,13 +65,14 @@ def plot_sim_reco(
     zoom=1,
     figsize=(12, 10),
     align_dim=True,
+    energy_threshold=1,
 ):
     # get approximate plottable area
 
 
     fig = plt.figure(figsize=figsize)
 
-    xlim, ylim, zlim = get_event_window(svx, svy, svz, sve, zoom=zoom)
+    xlim, ylim, zlim = get_event_window(svx, svy, svz, sve, zoom=zoom, e_threshold=energy_threshold)
 
     ax2 = fig.add_subplot(122, projection='3d')
     ax2.set_xlim(xlim)
@@ -111,7 +112,7 @@ def plot_sim_reco(
 
     # plot reco
     if not align_dim:
-        xlim, ylim, zlim = get_event_window(vx, vy, vz, ve, zoom=zoom)
+        xlim, ylim, zlim = get_event_window(vx, vy, vz, ve, zoom=zoom, e_threshold=energy_threshold)
 
     ax1 = fig.add_subplot(121, projection='3d')
     ax1.set_xlim(xlim)

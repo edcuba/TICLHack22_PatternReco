@@ -8,6 +8,9 @@ from torch.utils.data import Dataset
 
 from .dataset import FEATURE_KEYS, build_pair_tensor
 
+from .features import get_graph_level_features
+from .graphs import create_graph
+
 
 def get_trackster_representative_points(bx, by, bz, min_z, max_z):
     # take a line (0,0,0), (bx, by, bz) -> any point on the line is t*(bx, by, bz)
@@ -132,10 +135,17 @@ class TracksterPairsPU(Dataset):
             barycenter_x_ = tracksters["barycenter_x"].array()
             barycenter_y_ = tracksters["barycenter_y"].array()
             barycenter_z_ = tracksters["barycenter_z"].array()
+
+            vertices_x_ = tracksters["vertices_x"].array()
+            vertices_y_ = tracksters["vertices_y"].array()
             vertices_z_ = tracksters["vertices_z"].array()
+            vertices_e_ = tracksters["vertices_energy"].array()
 
             for eid in range(len(vertices_z_)):
+                vertices_x = vertices_x_[eid]
+                vertices_y = vertices_y_[eid]
                 vertices_z = vertices_z_[eid]
+                vertices_e = vertices_e_[eid]
                 barycenter_x = barycenter_x_[eid]
                 barycenter_y = barycenter_y_[eid]
                 barycenter_z = barycenter_z_[eid]
@@ -151,26 +161,31 @@ class TracksterPairsPU(Dataset):
                     continue
 
                 assert len(bigTs) == 1  # 1 particle with PU
-
                 bigT = bigTs[0]
-                min_z = min(vertices_z[bigT])
-                max_z = max(vertices_z[bigT])
-
-                barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
 
                 x1, x2 = get_trackster_representative_points(
                     barycenter_x[bigT],
                     barycenter_y[bigT],
                     barycenter_z[bigT],
-                    min_z,
-                    max_z
+                    min(vertices_z[bigT]),
+                    max(vertices_z[bigT])
                 )
 
+                barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
                 in_cone = get_tracksters_in_cone(x1, x2, barycentres)
 
                 trackster_features = list([
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
                 ])
+
+                bigT_graph = create_graph(
+                    vertices_x[bigT],
+                    vertices_y[bigT],
+                    vertices_z[bigT],
+                    vertices_e[bigT],
+                )
+
+                bigT_graph_features = get_graph_level_features(bigT_graph)
 
                 for recoTxId, distance in in_cone:
                     # get features for each reco trackster... pairwise?
@@ -179,7 +194,18 @@ class TracksterPairsPU(Dataset):
                     if recoTxId == bigT:
                         continue    # do not connect to itself
 
+                    recoTx_graph = create_graph(
+                        vertices_x[recoTxId],
+                        vertices_y[recoTxId],
+                        vertices_z[recoTxId],
+                        vertices_e[recoTxId],
+                    )
+                    recoTx_graph_features = get_graph_level_features(recoTx_graph)
+
                     features = build_pair_tensor((bigT, recoTxId), trackster_features)
+                    features += bigT_graph_features
+                    features += recoTx_graph_features
+
                     features.append(distance)
                     features.append(len(vertices_z[bigT]))
                     features.append(len(vertices_z[recoTxId]))
