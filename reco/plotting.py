@@ -161,7 +161,7 @@ def plot_fractions_hist(all_fractions, complete_fractions, incomplete_fractions)
     ax.hist(incomplete_fractions, bins=20)
 
 
-def plot_graph_3D(G, color, ax=None, edges=True, s=30):
+def plot_graph_3D(G, ax=None, edges=True, s=30):
     # Get node positions
     pos = nx.get_node_attributes(G, 'pos')
 
@@ -176,15 +176,17 @@ def plot_graph_3D(G, color, ax=None, edges=True, s=30):
         xi = []
         yi = []
         zi = []
-        for value in pos.values():
+        ei = []
+        clr = []
+        for k, value in pos.items():
             xi.append(value[0])
             yi.append(value[1])
             zi.append(value[2])
+            ei.append(G.nodes[k].get("energy", 1))
+            clr.append(G.nodes[k].get("color", "blue"))
 
-        if isinstance(color, str):
-            ax.scatter(xi, yi, zi, s=s, c=color)
-        else:
-            ax.scatter(xi, yi, zi, s=s, c=color, cmap='rainbow')
+        lc_size = np.array(ei) * s
+        ax.scatter(xi, yi, zi, s=lc_size, c=clr, cmap='rainbow')
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted
@@ -195,7 +197,7 @@ def plot_graph_3D(G, color, ax=None, edges=True, s=30):
                 z = np.array((pos[j[0]][2], pos[j[1]][2]))
 
                 # Plot the connecting lines
-                ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.5)
+                ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.4)
     if ax == None:
         plt.show()
 

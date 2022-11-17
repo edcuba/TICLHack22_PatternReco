@@ -14,7 +14,7 @@ def distance_matrix(trk_x, trk_y, trk_z):
     return distance
 
 
-def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index=None, N=1, higher_e=True):
+def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index=None, N=1, higher_e=True, color=None):
     """
     Construct a graph of the point cloud.
     Each node is assigned its energy and layercluster index info.
@@ -29,7 +29,8 @@ def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index=None, N=1, higher
     G = nx.Graph()
     for i in range(len(trk_energy)):
         lc_idx = None if trk_lc_index is None else trk_lc_index[i]
-        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i], index=lc_idx)
+        clr = None if color is None else color[i]
+        G.add_node(i, pos=(trk_x[i], trk_y[i], trk_z[i]), energy=trk_energy[i], index=lc_idx, color=clr)
 
         # sort indices by distance
         idx_by_distance = np.argsort(distance[i])
