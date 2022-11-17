@@ -338,7 +338,6 @@ class TracksterGraph(InMemoryDataset):
             pre_filter=None,
             N_FILES=None,
             MAX_DISTANCE=10,
-            ENERGY_THRESHOLD=10,
             include_graph_features=False,
             z_map=None,
         ):
@@ -346,7 +345,6 @@ class TracksterGraph(InMemoryDataset):
         self.z_map = z_map
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE
-        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
         self.raw_data_path = raw_data_path
         self.include_graph_features = include_graph_features
         self.root_dir = root_dir
@@ -371,7 +369,6 @@ class TracksterGraph(InMemoryDataset):
             self.name,
             f"{len(self.raw_file_names)}f",
             f"d{self.MAX_DISTANCE}",
-            f"e{self.ENERGY_THRESHOLD}",
             "gf" if self.include_graph_features else "ngf",
         ]
         return list([f"graph_{'_'.join(infos)}.pt"])
@@ -453,7 +450,6 @@ class TracksterGraph(InMemoryDataset):
             f"nodes={len(self.data.x)}",
             f"edges={len(self.data.y)}",
             f"max_distance={self.MAX_DISTANCE}",
-            f"energy_threshold={self.ENERGY_THRESHOLD}",
             f"graph_features={self.include_graph_features}"
         ]
         return f"TrackstersGraph({', '.join(infos)})"

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 
-def train_edge_pred(model, device, optimizer, loss_func, train_dl):
+def train_edge_pred(model, device, optimizer, loss_func, train_dl, obj_cond=False):
     train_loss = 0.0
     model.train()
 
@@ -16,7 +16,11 @@ def train_edge_pred(model, device, optimizer, loss_func, train_dl):
 
         optimizer.zero_grad()
 
-        seg_pred = model(data.x, data.edge_index, data.trackster_index)
+        if obj_cond:
+            seg_pred = model(data.x, data.edge_index, data.trackster_index)
+        else:
+            seg_pred = model(data.x, data.edge_index)
+
         loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 
         loss.backward()
@@ -37,7 +41,7 @@ def train_edge_pred(model, device, optimizer, loss_func, train_dl):
 
 
 @torch.no_grad()
-def test_edge_pred(model, device, loss_func, test_dl):
+def test_edge_pred(model, device, loss_func, test_dl, obj_cond=False):
     test_loss = 0.0
     model.eval()
 
@@ -48,7 +52,10 @@ def test_edge_pred(model, device, loss_func, test_dl):
         batch_size = len(data)
         data = data.to(device)
 
-        seg_pred = model(data.x, data.edge_index, data.trackster_index)
+        if obj_cond:
+            seg_pred = model(data.x, data.edge_index, data.trackster_index)
+        else:
+            seg_pred = model(data.x, data.edge_index)
 
         loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
 
