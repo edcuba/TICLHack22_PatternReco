@@ -1,5 +1,6 @@
 import awkward as ak
 from os import walk, path
+import sys
 
 import torch
 import uproot
@@ -126,7 +127,7 @@ class TracksterPairsPU(Dataset):
         assert len(self.raw_file_names) == self.N_FILES
 
         for source in self.raw_file_names:
-            print(f"Processing: {source}")
+            print(f"Processing: {source}", file=sys.stderr)
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
             simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
