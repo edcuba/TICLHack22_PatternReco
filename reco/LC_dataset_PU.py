@@ -12,6 +12,7 @@ from .datasetPU import get_major_PU_tracksters, get_trackster_representative_poi
 
 
 class LCGraphPU(InMemoryDataset):
+    # about 200kb per file
 
     def __init__(
             self,
@@ -21,9 +22,9 @@ class LCGraphPU(InMemoryDataset):
             transform=None,
             pre_transform=None,
             pre_filter=None,
-            N_FILES=10,
-            radius=15,
-            score_threshold=0.3,
+            N_FILES=None,
+            radius=10,
+            score_threshold=0.2,
         ):
         self.name = name
         self.N_FILES = N_FILES
@@ -49,7 +50,7 @@ class LCGraphPU(InMemoryDataset):
     def processed_file_names(self):
         infos = [
             self.name,
-            f"f{self.N_FILES}",
+            f"f{len(self.raw_file_names)}",
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
@@ -68,6 +69,7 @@ class LCGraphPU(InMemoryDataset):
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
             associations = uproot.open({source: "ticlNtuplizer/associations"})
             simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
+            clusters = uproot.open({source: "ticlNtuplizer/clusters"})
 
             assoc_data = associations.arrays([
                 "tsCLUE3D_recoToSim_SC",
@@ -79,10 +81,14 @@ class LCGraphPU(InMemoryDataset):
                 "barycenter_x",
                 "barycenter_y",
                 "barycenter_z",
-                "vertices_x",
-                "vertices_y",
-                "vertices_z",
-                "vertices_energy",
+                "vertices_indexes",
+            ])
+
+            cluster_data = clusters.arrays([
+                "position_x",
+                "position_y",
+                "position_z",
+                "energy",
             ])
 
             simtrackster_data = simtracksters.arrays([
@@ -90,19 +96,29 @@ class LCGraphPU(InMemoryDataset):
             ])
 
             for eid in range(len(trackster_data["barycenter_x"])):
-                vertices_x = trackster_data["vertices_x"][eid]
-                vertices_y = trackster_data["vertices_y"][eid]
-                vertices_z = trackster_data["vertices_z"][eid]
-                vertices_e = trackster_data["vertices_energy"][eid]
 
+                # get LC info
+                clusters_x = cluster_data["position_x"][eid]
+                clusters_y = cluster_data["position_y"][eid]
+                clusters_z = cluster_data["position_z"][eid]
+                clusters_e = cluster_data["energy"][eid]
+
+                # get trackster info
                 barycenter_x = trackster_data["barycenter_x"][eid]
                 barycenter_y = trackster_data["barycenter_y"][eid]
                 barycenter_z = trackster_data["barycenter_z"][eid]
 
+                # reconstruct trackster LC info
+                vertices_indices = trackster_data["vertices_indexes"][eid]
+                vertices_x = ak.Array([clusters_x[indices] for indices in vertices_indices])
+                vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
+                vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
+                vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
+
+                # get associations data
                 reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
                 reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
                 reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
-
                 sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
 
 

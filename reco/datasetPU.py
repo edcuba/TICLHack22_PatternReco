@@ -1,3 +1,4 @@
+import awkward as ak
 from os import walk, path
 
 import torch
@@ -41,7 +42,7 @@ def get_tracksters_in_cone(x1, x2, barycentres, radius=15):
 def get_major_PU_tracksters(
     reco2sim,
     sim_raw_energy,
-    score_threshold=0.3,
+    score_threshold=0.2,
 ):
     # assuming only one simtrackster to keep things easy
     big = []
@@ -63,6 +64,7 @@ def get_major_PU_tracksters(
 
 
 class TracksterPairsPU(Dataset):
+    # output is about 250kb per file
 
     def __init__(
             self,
@@ -70,9 +72,9 @@ class TracksterPairsPU(Dataset):
             root_dir,
             raw_data_path,
             transform=None,
-            N_FILES=10,
-            radius=15,
-            score_threshold=0.3,
+            N_FILES=None,
+            radius=10,
+            score_threshold=0.2,
         ):
         self.name = name
         self.N_FILES = N_FILES
@@ -97,13 +99,17 @@ class TracksterPairsPU(Dataset):
             files.extend(filenames)
             break
         full_paths = list([path.join(self.raw_data_path, f) for f in files])
+
+        if self.N_FILES is None:
+            self.N_FILES = len(full_paths)
+
         return full_paths[:self.N_FILES]
 
     @property
     def processed_file_names(self):
         infos = [
             self.name,
-            f"f{self.N_FILES}",
+            f"f{len(self.raw_file_names)}",
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
@@ -119,42 +125,67 @@ class TracksterPairsPU(Dataset):
 
         assert len(self.raw_file_names) == self.N_FILES
 
-
         for source in self.raw_file_names:
             print(f"Processing: {source}")
 
             tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
             simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
             associations = uproot.open({source: "ticlNtuplizer/associations"})
+            clusters = uproot.open({source: "ticlNtuplizer/clusters"})
 
-            reco2sim_index_ = associations["tsCLUE3D_recoToSim_SC"].array()
-            reco2sim_shared_ = associations["tsCLUE3D_recoToSim_SC_sharedE"].array()
-            reco2sim_score_ = associations["tsCLUE3D_recoToSim_SC_score"].array()
+            assoc_data = associations.arrays([
+                "tsCLUE3D_recoToSim_SC",
+                "tsCLUE3D_recoToSim_SC_sharedE",
+                "tsCLUE3D_recoToSim_SC_score",
+            ])
 
-            sim_raw_energy_ = simtracksters["stsSC_raw_energy"].array()
-            barycenter_x_ = tracksters["barycenter_x"].array()
-            barycenter_y_ = tracksters["barycenter_y"].array()
-            barycenter_z_ = tracksters["barycenter_z"].array()
+            trackster_data = tracksters.arrays([
+                "barycenter_x",
+                "barycenter_y",
+                "barycenter_z",
+                "vertices_indexes"
+            ])
 
-            vertices_x_ = tracksters["vertices_x"].array()
-            vertices_y_ = tracksters["vertices_y"].array()
-            vertices_z_ = tracksters["vertices_z"].array()
-            vertices_e_ = tracksters["vertices_energy"].array()
+            cluster_data = clusters.arrays([
+                "position_x",
+                "position_y",
+                "position_z",
+                "energy",
+            ])
 
-            for eid in range(len(vertices_z_)):
-                vertices_x = vertices_x_[eid]
-                vertices_y = vertices_y_[eid]
-                vertices_z = vertices_z_[eid]
-                vertices_e = vertices_e_[eid]
-                barycenter_x = barycenter_x_[eid]
-                barycenter_y = barycenter_y_[eid]
-                barycenter_z = barycenter_z_[eid]
+            simtrackster_data = simtracksters.arrays([
+                "stsSC_raw_energy"
+            ])
 
-                reco2sim_score = reco2sim_score_[eid]
+            for eid in range(len(trackster_data["barycenter_x"])):
+
+                # get LC info
+                clusters_x = cluster_data["position_x"][eid]
+                clusters_y = cluster_data["position_y"][eid]
+                clusters_z = cluster_data["position_z"][eid]
+                clusters_e = cluster_data["energy"][eid]
+
+                # get trackster info
+                barycenter_x = trackster_data["barycenter_x"][eid]
+                barycenter_y = trackster_data["barycenter_y"][eid]
+                barycenter_z = trackster_data["barycenter_z"][eid]
+
+                # reconstruct trackster LC info
+                vertices_indices = trackster_data["vertices_indexes"][eid]
+                vertices_x = ak.Array([clusters_x[indices] for indices in vertices_indices])
+                vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
+                vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
+                vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
+
+                # get associations data
+                reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
+                reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
+                reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
+                sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
 
                 bigTs = get_major_PU_tracksters(
-                    zip(reco2sim_index_[eid], reco2sim_shared_[eid], reco2sim_score),
-                    sim_raw_energy_[eid],
+                    zip(reco2sim_index, reco2sim_sharedE, reco2sim_score),
+                    sim_raw_energy,
                 )
 
                 if not bigTs:
@@ -188,9 +219,6 @@ class TracksterPairsPU(Dataset):
                 bigT_graph_features = get_graph_level_features(bigT_graph)
 
                 for recoTxId, distance in in_cone:
-                    # get features for each reco trackster... pairwise?
-                    # graph-wise?
-                    # start pairwise (look at BiPartite Graphs in Pytorch Geometric)
                     if recoTxId == bigT:
                         continue    # do not connect to itself
 
