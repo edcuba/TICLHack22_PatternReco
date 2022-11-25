@@ -110,7 +110,7 @@ class TracksterPairsPU(Dataset):
     def processed_file_names(self):
         infos = [
             self.name,
-            f"f{len(self.raw_file_names)}",
+            f"f{self.N_FILES or len(self.raw_file_names)}",
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
