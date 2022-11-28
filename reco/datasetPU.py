@@ -261,11 +261,11 @@ class TracksterPairsPU(Dataset):
             f"score_threshold={self.SCORE_THRESHOLD}"
         ]
         return f"<TracksterPairsPU {' '.join(infos)}>"
-    
-    
-    
+
+
+
 class TracksterGraphPU(InMemoryDataset):
-    
+
     def __init__(
             self,
             name,
@@ -395,12 +395,11 @@ class TracksterGraphPU(InMemoryDataset):
 
                 barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
                 in_cone = get_tracksters_in_cone(x1, x2, barycentres)
-                indexes = [idx for idx, _ in in_cone]
-                
+
                 trackster_features = list([
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
                 ])
-                
+
                 node_features = []
                 node_labels = []
 
@@ -411,8 +410,8 @@ class TracksterGraphPU(InMemoryDataset):
                         vertices_y[recoTxId],
                         vertices_z[recoTxId],
                         vertices_e[recoTxId],
-                    )                    
-                    
+                    )
+
                     features = [int(recoTxId == bigT), distance, len(vertices_z[recoTxId])]
                     features += [f[recoTxId] for f in trackster_features]
                     features += get_graph_level_features(recoTx_graph)
@@ -420,14 +419,9 @@ class TracksterGraphPU(InMemoryDataset):
                     node_features.append(features)
                     node_labels.append(1 - reco2sim_score[recoTxId][0])
 
-                x = torch.tensor(node_features)
-                y = torch.tensor(node_labels)
-                
-                print(x.shape, y.shape)
-                
                 data_list.append(Data(
-                    x=x,
-                    y=y,
+                    x=torch.tensor(node_features, dtype=torch.float),
+                    y=torch.tensor(node_labels, dtype=torch.float),
                 ))
 
         data, slices = self.collate(data_list)
