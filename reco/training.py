@@ -99,9 +99,17 @@ def split_geo_train_test(ds, batch_size=64, test_set_fraction=0.1):
     return train_dl, test_dl
 
 
-def precision_recall_curve(model, device, test_dl, beta=0.5, step=1, focus_metric="b_acc"):
+def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8, step=1, focus_metric="b_acc"):
+    """
+    Plot the precision/recall curve depending on the decision threshold
+
+    There are two kinds of threshold here:
+    - model (0-1 whether we want to cluster this trackster or not)
+    - simtrackster, what we consider a relevant trackster (based on the score - usually 0.8)
+    """
+
     th_values = [i / 100. for i in range(1, 100, step)]
-    
+
     result = {
         "precision": [],
         "recall": [],
@@ -124,11 +132,11 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, step=1, focus_metri
 
             b = b.to(device)
             l = l.reshape(-1)
-            
+
             model_pred = model(b).detach().cpu().reshape(-1)
             pred += (model_pred > th).type(torch.int).tolist()
-            lab += (l > th).type(torch.int).tolist()
-    
+            lab += (l > truth_threshold).type(torch.int).tolist()
+
         result["precision"].append(precision_score(lab, pred, zero_division=0))
         result["recall"].append(recall_score(lab, pred))
         result["fbeta"].append(fbeta_score(lab, pred, beta=beta))
