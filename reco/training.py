@@ -99,14 +99,17 @@ def split_geo_train_test(ds, batch_size=64, test_set_fraction=0.1):
     return train_dl, test_dl
 
 
-def precision_recall_curve(model, device, test_dl, beta=0.5, step=1):
+def precision_recall_curve(model, device, test_dl, beta=0.5, step=1, focus_metric="b_acc"):
     th_values = [i / 100. for i in range(1, 100, step)]
-    precision = []
-    recall = []
-    fbeta = []
-    b_acc = []
+    
+    result = {
+        "precision": [],
+        "recall": [],
+        "fbeta": [],
+        "b_acc": [],
+        "acc": [],
+    }
     cm = []
-    acc = []
 
     for th in th_values:
         pred = []
@@ -120,29 +123,30 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, step=1):
                 b, l = data
 
             b = b.to(device)
-            l = l.to(device)
-
-            pred += (model(b) > th).type(torch.int).tolist()
+            l = l.reshape(-1)
+            
+            model_pred = model(b).detach().cpu().reshape(-1)
+            pred += (model_pred > th).type(torch.int).tolist()
             lab += (l > th).type(torch.int).tolist()
-        precision.append(precision_score(lab, pred, zero_division=0))
-        recall.append(recall_score(lab, pred))
-        fbeta.append(fbeta_score(lab, pred, beta=beta))
-        b_acc.append(balanced_accuracy_score(lab, pred))
+    
+        result["precision"].append(precision_score(lab, pred, zero_division=0))
+        result["recall"].append(recall_score(lab, pred))
+        result["fbeta"].append(fbeta_score(lab, pred, beta=beta))
+        result["b_acc"].append(balanced_accuracy_score(lab, pred))
+        result["acc"].append(accuracy_score(lab, pred))
         cm.append(confusion_matrix(lab, pred).ravel())
-        acc.append(accuracy_score(lab, pred))
 
     plt.figure()
-    plt.plot(th_values, precision, label="precision")
-    plt.plot(th_values, b_acc, label="b_acc")
-    plt.plot(th_values, recall, label="recall")
-    plt.plot(th_values, fbeta, label=f"f{beta}")
+    for k, v in result.items():
+        plt.plot(th_values, v, label=k)
+
     plt.xlabel("Threshold")
     plt.legend()
     plt.show()
 
-    bi = np.argmax(fbeta)
+    bi = np.argmax(result[focus_metric])
     decision_th = th_values[bi]
 
     tn, fp, fn, tp = cm[bi]
     print(f"TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}")
-    print(f'TH: {decision_th} Acc: {acc[bi]:.3f} BAcc: {b_acc[bi]:.3f} P: {precision[bi]:.3f} R: {recall[bi]:.3f} F{beta}: {fbeta[bi]:.3f}')
+    print(f"TH: {decision_th}", " ".join([f"{k}: {v[bi]:.3f}" for k, v in result.items()]))

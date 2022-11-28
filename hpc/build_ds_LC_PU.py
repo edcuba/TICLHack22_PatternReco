@@ -8,31 +8,15 @@ raw_dir = f"/mnt/ceph/users/ecuba/{ds_name}"
 radius = 10
 threshold = 0.2
 
-ds = LCGraphPU(
-    ds_name,
-    data_root,
-    raw_dir,
-    N_FILES=100,
-    radius=radius,
-    score_threshold=threshold,
-)
-del ds
+sizes = [10, 100, 250, None]
 
-ds = LCGraphPU(
-    ds_name,
-    data_root,
-    raw_dir,
-    N_FILES=250,
-    radius=radius,
-    score_threshold=threshold,
-)
-del ds
-
-ds = LCGraphPU(
-    ds_name,
-    data_root,
-    raw_dir,
-    radius=radius,
-    score_threshold=threshold,
-)
-del ds
+for s in sizes:
+    ds = LCGraphPU(
+        ds_name + ".2",
+        data_root,
+        raw_dir,
+        N_FILES=s,
+        radius=radius,
+        score_threshold=threshold,
+    )
+    del ds

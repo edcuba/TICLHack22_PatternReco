@@ -145,15 +145,25 @@ class LCGraphPU(InMemoryDataset):
                 in_cone = get_tracksters_in_cone(x1, x2, barycentres)
                 indexes = [idx for idx, _ in in_cone]
 
+                # LC coordinates
                 tvx = ak.flatten(vertices_x[indexes])
                 tvy = ak.flatten(vertices_y[indexes])
                 tvz = ak.flatten(vertices_z[indexes])
                 tve = ak.flatten(vertices_e[indexes])
+                
+                # focus feature
+                ftf = ak.flatten(list([int(idx == bigT)] * len(vertices_z[idx]) for idx in indexes))
+                
+                # label
                 lc_labels = ak.flatten(list([1 - reco2sim_score[idx][0]] * len(vertices_z[idx]) for idx in indexes))
+                
+                # index is unique per event
+                tr_indexes = ak.flatten(list([i] * len(vertices_z[idx]) for i, idx in enumerate(indexes)))
 
                 data_list.append(Data(
-                    x=torch.tensor((tvx, tvy, tvz, tve)).T,
-                    y=torch.tensor(lc_labels)
+                    x=torch.tensor((ftf, tvx, tvy, tvz, tve)).T,
+                    y=torch.tensor(lc_labels),
+                    trackster_index=torch.tensor(tr_indexes, dtype=torch.int64),
                 ))
 
         data, slices = self.collate(data_list)
