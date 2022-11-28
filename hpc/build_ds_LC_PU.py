@@ -1,4 +1,4 @@
-from reco.LC_dataset_PU import LCGraphPU
+from reco.datasetLCPU import LCGraphPU
 
 
 data_root = "/mnt/ceph/users/ecuba/processed"

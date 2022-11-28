@@ -12,9 +12,9 @@ import torch_geometric.transforms as T
 
 import sklearn.metrics as metrics
 
-from reco.learn import train_edge_pred, test_edge_pred
+from reco.training import train_edge_pred, test_edge_pred
 from reco.loss import FocalLoss
-from reco.LC_dataset_PU import LCGraphPU
+from reco.datasetLCPU import LCGraphPU
 
 data_root = "/mnt/ceph/users/ecuba/processed"
 ds_name = "CloseByGamma200PUFull"
