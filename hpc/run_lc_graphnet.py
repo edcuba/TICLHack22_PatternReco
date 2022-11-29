@@ -1,6 +1,6 @@
 # %%
-import sys
 import torch
+import sys
 import torch.nn as nn
 from torch.optim import SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -8,34 +8,34 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import random_split
 from torch_geometric.nn import DynamicEdgeConv
 from torch_geometric.loader import DataLoader
-import torch_geometric.transforms as T
 
 import sklearn.metrics as metrics
 
-from reco.training import train_edge_pred, test_edge_pred
+from reco.training import train_edge_pred, test_edge_pred, roc_auc
 from reco.loss import FocalLoss
 from reco.datasetLCPU import LCGraphPU
 
-data_root = "/mnt/ceph/users/ecuba/processed"
 ds_name = "CloseByGamma200PUFull"
+
+data_root = "/mnt/ceph/users/ecuba/processed"
 raw_dir = f"/mnt/ceph/users/ecuba/{ds_name}"
 
 # %%
 # CUDA Setup
 device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}", file=sys.stderr)
+print(f"Using device: {device}")
 
 # %%
-transform = T.Compose([T.NormalizeFeatures()])
-
 ds = LCGraphPU(
-    ds_name,
+    ds_name + ".2",
     data_root,
     raw_dir,
-    transform=transform,
-    N_FILES=250,
+    N_FILES=464,
     radius=10,
 )
+
+print(ds.processed_file_names)
+
 # %%
 ds_size = len(ds)
 test_set_size = ds_size // 10
@@ -44,15 +44,15 @@ train_set, test_set = random_split(ds, [train_set_size, test_set_size])
 print(f"Train graphs: {len(train_set)}, Test graphs: {len(test_set)}")
 
 # this is very nice - handles the dimensions automatically
-train_dl = DataLoader(train_set, batch_size=64, shuffle=True)
-test_dl = DataLoader(test_set, batch_size=64, shuffle=True)
+train_dl = DataLoader(train_set, batch_size=32, shuffle=True)
+test_dl = DataLoader(test_set, batch_size=32, shuffle=True)
 
 # %%
 print("Labels (one per layer-cluster):", len(ds.data.y))
 
 # %%
-balance = float(sum(ds.data.y) / len(ds.data.y))
-print(f"dataset balance: {balance:.3f}")
+balance = float(sum(ds.data.y > 0.8) / len(ds.data.y))
+print(f"dataset balance: {balance * 100:.2f}%")
 
 # %%
 class EdgeConvBlock(nn.Module):
@@ -87,6 +87,7 @@ class EdgeConvBlock(nn.Module):
 class LCGraphNet(nn.Module):
     def __init__(self, input_dim, output_dim=1, dropout=0.2, skip_link=False):
         super(LCGraphNet, self).__init__()
+        # particlenet light
 
         hdim1 = 64
         in_dim2 = hdim1 + input_dim if skip_link else hdim1
@@ -94,17 +95,14 @@ class LCGraphNet(nn.Module):
         hdim2 = 128
         in_dim3 = hdim2 + in_dim2 if skip_link else hdim2
 
-        hdim3 = 128
-        in_dim4 = hdim3 + in_dim3 if skip_link else hdim3
+        hdim3 = 256
 
         # EdgeConv
         self.graphconv1 = EdgeConvBlock(input_dim, hdim1, skip_link=skip_link)
         self.graphconv2 = EdgeConvBlock(in_dim2, hdim2, skip_link=skip_link)
-        self.graphconv3 = EdgeConvBlock(in_dim3, hdim3, skip_link=skip_link)
 
-        # Edge features from node embeddings for classification
         self.edgenetwork = nn.Sequential(
-            nn.Linear(in_dim4, hdim3),
+            nn.Linear(in_dim3, hdim3),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hdim3, output_dim),
@@ -112,19 +110,17 @@ class LCGraphNet(nn.Module):
         )
 
     def forward(self, X, _edge_index=None):
-
         H = self.graphconv1(X)
         H = self.graphconv2(H)
-        H = self.graphconv3(H)
-
         return self.edgenetwork(H).squeeze(-1)
 
 # %%
 model = LCGraphNet(input_dim=ds.data.x.shape[1], skip_link=False)
-epochs = 50
+epochs = 201
+model_path = f"models/LCGraphNet.64.128.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
 
-# alpha - percentage of negative edges
-loss_func = FocalLoss(alpha=balance, gamma=2)
+# %%
+loss_func = FocalLoss(alpha=1-balance, gamma=2)
 
 model = model.to(device)
 optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-4)
@@ -140,18 +136,20 @@ for epoch in range(epochs):
         train_dl
     )
 
-    train_acc = metrics.accuracy_score((train_true > 0.5).astype(int), (train_pred > 0.5).astype(int))
+    train_auc = metrics.roc_auc_score((train_true > 0.8).astype(int), train_pred)
     scheduler.step()
 
-    if epoch % 1 == 0:
+    if epoch % 5 == 0:
         test_loss, test_true, test_pred = test_edge_pred(model, device, loss_func, test_dl)
-        test_acc = metrics.accuracy_score((test_true > 0.5).astype(int), (test_pred > 0.5).astype(int))
+        test_auc = metrics.roc_auc_score((test_true > 0.8).astype(int), test_pred)
         print(
             f"Epoch {epoch}:",
-            f"\ttrain loss:{train_loss:.2f}\ttrain acc: {train_acc:.3f}",
-            f"\t test loss:{test_loss:.2f} \t test acc: {test_acc:.3f}",
+            f"\ttrain loss:{train_loss:.2f}\ttrain auc: {train_auc:.3f}",
+            f"\t test loss:{test_loss:.2f} \t test auc: {test_auc:.3f}",
             file=sys.stderr
         )
 
+torch.save(model.state_dict(), model_path)
+
 # %%
-torch.save(model.state_dict(), f"models/LCGraphNet.64.64.64.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt")
+print(roc_auc(model, device, test_dl))

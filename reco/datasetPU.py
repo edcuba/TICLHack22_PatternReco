@@ -373,7 +373,6 @@ class TracksterGraphPU(InMemoryDataset):
                 reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
                 sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
 
-
                 bigTs = get_major_PU_tracksters(
                     zip(reco2sim_index, reco2sim_sharedE, reco2sim_score),
                     sim_raw_energy,
