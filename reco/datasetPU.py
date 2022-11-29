@@ -30,7 +30,7 @@ def get_trackster_representative_points(bx, by, bz, min_z, max_z):
     return x1, x2
 
 
-def get_tracksters_in_cone(x1, x2, barycentres, radius=15):
+def get_tracksters_in_cone(x1, x2, barycentres, radius=10):
     in_cone = []
     for i, x0 in enumerate(barycentres):
         # barycenter between the first and last layer
@@ -206,7 +206,7 @@ class TracksterPairsPU(Dataset):
                 )
 
                 barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
-                in_cone = get_tracksters_in_cone(x1, x2, barycentres)
+                in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
 
                 trackster_features = list([
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
@@ -393,7 +393,7 @@ class TracksterGraphPU(InMemoryDataset):
                 )
 
                 barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
-                in_cone = get_tracksters_in_cone(x1, x2, barycentres)
+                in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
 
                 trackster_features = list([
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
