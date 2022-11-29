@@ -8,7 +8,7 @@ from torch_geometric.loader import DataLoader
 
 from torch_geometric.data import Data
 
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, fbeta_score, balanced_accuracy_score
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, fbeta_score, balanced_accuracy_score, roc_auc_score
 
 
 def train_edge_pred(model, device, optimizer, loss_func, train_dl, obj_cond=False):
@@ -97,6 +97,28 @@ def split_geo_train_test(ds, batch_size=64, test_set_fraction=0.1):
     test_dl = DataLoader(test_set, batch_size=batch_size, shuffle=True)
 
     return train_dl, test_dl
+
+
+def roc_auc(model, device, test_dl, truth_threshold=0.8):
+
+    y_pred = []
+    y_true = []
+
+    for data in test_dl:
+
+        if isinstance(data, Data):
+            b = data.x
+            l = data.y
+        else:
+            b, l = data
+
+        b = b.to(device)
+        l = l.reshape(-1)
+
+        y_pred += model(b).detach().cpu().reshape(-1).tolist()
+        y_true += (l > truth_threshold).type(torch.int).tolist()
+
+    return roc_auc_score(y_true, y_pred)
 
 
 def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8, step=1, focus_metric="b_acc"):
