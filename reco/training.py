@@ -8,7 +8,7 @@ from torch_geometric.loader import DataLoader
 
 from torch_geometric.data import Data
 
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, fbeta_score, balanced_accuracy_score, roc_auc_score
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, fbeta_score, balanced_accuracy_score, roc_auc_score
 
 
 def train_edge_pred(model, device, optimizer, loss_func, train_dl, obj_cond=False):
@@ -99,10 +99,13 @@ def split_geo_train_test(ds, batch_size=64, test_set_fraction=0.1):
     return train_dl, test_dl
 
 
+@torch.no_grad()
 def roc_auc(model, device, test_dl, truth_threshold=0.8):
 
     y_pred = []
     y_true = []
+    
+    model.eval()
 
     for data in test_dl:
 
@@ -121,6 +124,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.8):
     return roc_auc_score(y_true, y_pred)
 
 
+@torch.no_grad()
 def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8, step=1, focus_metric="b_acc"):
     """
     Plot the precision/recall curve depending on the decision threshold
@@ -129,7 +133,7 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
     - model (0-1 whether we want to cluster this trackster or not)
     - simtrackster, what we consider a relevant trackster (based on the score - usually 0.8)
     """
-
+    model.eval()
     th_values = [i / 100. for i in range(1, 100, step)]
 
     result = {
@@ -137,7 +141,6 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
         "recall": [],
         "fbeta": [],
         "b_acc": [],
-        "acc": [],
     }
     cm = []
 
@@ -163,7 +166,6 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
         result["recall"].append(recall_score(lab, pred))
         result["fbeta"].append(fbeta_score(lab, pred, beta=beta))
         result["b_acc"].append(balanced_accuracy_score(lab, pred))
-        result["acc"].append(accuracy_score(lab, pred))
         cm.append(confusion_matrix(lab, pred).ravel())
 
     plt.figure()
