@@ -75,7 +75,7 @@ class LCGraphNet(nn.Module):
         # EdgeConv
         self.graphconv1 = EdgeConvBlock(input_dim, hdim1)
         self.graphconv2 = EdgeConvBlock(hdim1, hdim2)
-        self.graphconv2 = EdgeConvBlock(hdim2, hdim3)
+        self.graphconv3 = EdgeConvBlock(hdim2, hdim3)
 
         self.edgenetwork = nn.Sequential(
             nn.Linear(hdim3, hdim_fc),
@@ -88,6 +88,7 @@ class LCGraphNet(nn.Module):
     def forward(self, X, edge_index):
         H = self.graphconv1(X, edge_index)
         H = self.graphconv2(H, edge_index)
+        H = self.graphconv3(H, edge_index)
         return self.edgenetwork(H).squeeze(-1)
 
 # %%
