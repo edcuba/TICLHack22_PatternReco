@@ -104,21 +104,28 @@ def roc_auc(model, device, test_dl, truth_threshold=0.8):
 
     y_pred = []
     y_true = []
-    
+
     model.eval()
 
     for data in test_dl:
 
+        ei = None
         if isinstance(data, Data):
             b = data.x
             l = data.y
+            ei = data.edge_index
         else:
             b, l = data
 
         b = b.to(device)
         l = l.reshape(-1)
 
-        y_pred += model(b).detach().cpu().reshape(-1).tolist()
+        if ei is None:
+            model_pred = model(b)
+        else:
+            model_pred = model(b, ei)
+
+        y_pred += model_pred.detach().cpu().reshape(-1).tolist()
         y_true += (l > truth_threshold).type(torch.int).tolist()
 
     return roc_auc_score(y_true, y_pred)
@@ -149,16 +156,23 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
         lab = []
         for data in test_dl:
 
+            ei = None
             if isinstance(data, Data):
                 b = data.x
                 l = data.y
+                ei = data.edge_index
             else:
                 b, l = data
 
             b = b.to(device)
             l = l.reshape(-1)
 
-            model_pred = model(b).detach().cpu().reshape(-1)
+            if ei is None:
+                model_pred = model(b)
+            else:
+                model_pred = model(b, ei)
+
+            model_pred = model_pred.detach().cpu().reshape(-1)
             pred += (model_pred > th).type(torch.int).tolist()
             lab += (l > truth_threshold).type(torch.int).tolist()
 
