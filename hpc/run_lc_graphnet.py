@@ -63,23 +63,25 @@ print(f"dataset balance: {balance * 100:.2f}%")
 
 # %%
 class LCGraphNet(nn.Module):
-    def __init__(self, input_dim, output_dim=1, dropout=0.2):
+    def __init__(self, input_dim, output_dim=1, dropout=0.1):
         super(LCGraphNet, self).__init__()
-        # particlenet light
+        # particlenet
 
         hdim1 = 64
         hdim2 = 128
         hdim3 = 256
+        hdim_fc = 256
 
         # EdgeConv
         self.graphconv1 = EdgeConvBlock(input_dim, hdim1)
         self.graphconv2 = EdgeConvBlock(hdim1, hdim2)
+        self.graphconv2 = EdgeConvBlock(hdim2, hdim3)
 
         self.edgenetwork = nn.Sequential(
-            nn.Linear(hdim2, hdim3),
+            nn.Linear(hdim3, hdim_fc),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hdim3, output_dim),
+            nn.Linear(hdim_fc, output_dim),
             nn.Sigmoid()
         )
 
@@ -91,7 +93,7 @@ class LCGraphNet(nn.Module):
 # %%
 model = LCGraphNet(input_dim=ds.data.x.shape[1])
 epochs = 201
-model_path = f"models/LCGraphNetKNN.64.128.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
+model_path = f"models/LCGraphNetKNN.64.128.256.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
 
 # %%
 # alpha - percentage of negative edges
