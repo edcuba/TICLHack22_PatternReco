@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch_geometric.nn import DynamicEdgeConv, EdgeConv
 
 
 class EdgeConvNet(nn.Module):
@@ -20,3 +21,23 @@ class EdgeConvNet(nn.Module):
 
     def forward(self, X):
         return self.convnetwork(X)
+
+
+class DynamicEdgeConvBlock(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, aggr="add", k=8):
+        super(DynamicEdgeConvBlock, self).__init__()
+        self.dynamicgraphconv = DynamicEdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr, k=k)
+
+    def forward(self, X, _=None):
+        return self.dynamicgraphconv(X)
+
+
+class EdgeConvBlock(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, aggr="add"):
+        super(EdgeConvBlock, self).__init__()
+        self.graphconv = EdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr)
+
+    def forward(self, X, edge_index):
+        return self.graphconv(X, edge_index)

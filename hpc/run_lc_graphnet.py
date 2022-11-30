@@ -1,13 +1,16 @@
 # %%
 import torch
+
 import sys
 import torch.nn as nn
 from torch.optim import SGD
+from torch_cluster import knn_graph
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torch.utils.data import random_split
-from torch_geometric.nn import DynamicEdgeConv
 from torch_geometric.loader import DataLoader
+
+from reco.model import EdgeConvBlock
 
 import sklearn.metrics as metrics
 
@@ -26,15 +29,19 @@ device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # %%
+def knn_transform(data):
+    data.edge_index = knn_graph(data.x[:,1:4], k=8, loop=False)
+    return data
+
+# %%
 ds = LCGraphPU(
     ds_name + ".2",
     data_root,
     raw_dir,
+    transform=knn_transform,
     N_FILES=464,
     radius=10,
 )
-
-print(ds.processed_file_names)
 
 # %%
 ds_size = len(ds)
@@ -55,72 +62,40 @@ balance = float(sum(ds.data.y > 0.8) / len(ds.data.y))
 print(f"dataset balance: {balance * 100:.2f}%")
 
 # %%
-class EdgeConvBlock(nn.Module):
-
-    def __init__(self, input_dim, hidden_dim, aggr="add", skip_link=False, k=8):
-        super(EdgeConvBlock, self).__init__()
-
-        convnetwork = nn.Sequential(
-            nn.Linear(2 * input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU()
-        )
-
-        self.dynamicgraphconv = DynamicEdgeConv(nn=convnetwork, aggr=aggr, k=k)
-        self.skip_link = skip_link
-
-    def forward(self, X, edge_index=None):
-        H = self.dynamicgraphconv(X)
-
-        if self.skip_link:
-            return torch.hstack((H, X))
-
-        return H
-
-
 class LCGraphNet(nn.Module):
-    def __init__(self, input_dim, output_dim=1, dropout=0.2, skip_link=False):
+    def __init__(self, input_dim, output_dim=1, dropout=0.2):
         super(LCGraphNet, self).__init__()
         # particlenet light
 
         hdim1 = 64
-        in_dim2 = hdim1 + input_dim if skip_link else hdim1
-
         hdim2 = 128
-        in_dim3 = hdim2 + in_dim2 if skip_link else hdim2
-
         hdim3 = 256
 
         # EdgeConv
-        self.graphconv1 = EdgeConvBlock(input_dim, hdim1, skip_link=skip_link)
-        self.graphconv2 = EdgeConvBlock(in_dim2, hdim2, skip_link=skip_link)
+        self.graphconv1 = EdgeConvBlock(input_dim, hdim1)
+        self.graphconv2 = EdgeConvBlock(hdim1, hdim2)
 
         self.edgenetwork = nn.Sequential(
-            nn.Linear(in_dim3, hdim3),
+            nn.Linear(hdim2, hdim3),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hdim3, output_dim),
             nn.Sigmoid()
         )
 
-    def forward(self, X, _edge_index=None):
-        H = self.graphconv1(X)
-        H = self.graphconv2(H)
+    def forward(self, X, edge_index):
+        H = self.graphconv1(X, edge_index)
+        H = self.graphconv2(H, edge_index)
         return self.edgenetwork(H).squeeze(-1)
 
 # %%
-model = LCGraphNet(input_dim=ds.data.x.shape[1], skip_link=False)
+model = LCGraphNet(input_dim=ds.data.x.shape[1])
 epochs = 201
-model_path = f"models/LCGraphNet.64.128.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
+model_path = f"models/LCGraphNetKNN.64.128.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
 
 # %%
-loss_func = FocalLoss(alpha=1-balance, gamma=2)
+# alpha - percentage of negative edges
+loss_func = FocalLoss(alpha=balance, gamma=2)
 
 model = model.to(device)
 optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-4)
@@ -153,3 +128,6 @@ torch.save(model.state_dict(), model_path)
 
 # %%
 print(roc_auc(model, device, test_dl))
+
+# %%
+print(model_path)
