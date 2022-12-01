@@ -11,7 +11,7 @@ from torch_geometric.data import Data
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, fbeta_score, balanced_accuracy_score, roc_auc_score
 
 
-def train_edge_pred(model, device, optimizer, loss_func, train_dl, obj_cond=False):
+def train_edge_pred(model, device, optimizer, loss_func, train_dl):
     train_loss = 0.0
     model.train()
 
@@ -25,19 +25,22 @@ def train_edge_pred(model, device, optimizer, loss_func, train_dl, obj_cond=Fals
 
         optimizer.zero_grad()
 
-        if obj_cond:
-            seg_pred = model(data.x, data.edge_index, data.trackster_index)
-        else:
-            seg_pred = model(data.x, data.edge_index)
+        seg_pred = model(data.x, data.edge_index)
+        y_true = data.y
 
-        loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
+        if data.mask is not None:
+            seg_pred = seg_pred[data.mask]
+            y_true = y_true[data.mask]
+
+
+        loss = loss_func(seg_pred.view(-1, 1), y_true.view(-1, 1).type(torch.float))
 
         loss.backward()
         optimizer.step()
 
         train_loss += loss.item() * batch_size
 
-        seg_np = data.y.cpu().numpy()
+        seg_np = y_true.cpu().numpy()
         pred_np = seg_pred.detach().cpu().numpy()
 
         train_true_seg.append(seg_np.reshape(-1))
@@ -61,16 +64,17 @@ def test_edge_pred(model, device, loss_func, test_dl, obj_cond=False):
         batch_size = len(data)
         data = data.to(device)
 
-        if obj_cond:
-            seg_pred = model(data.x, data.edge_index, data.trackster_index)
-        else:
-            seg_pred = model(data.x, data.edge_index)
+        seg_pred = model(data.x, data.edge_index)
 
-        loss = loss_func(seg_pred.view(-1, 1), data.y.view(-1, 1).type(torch.float))
+        y_true = data.y
+        if data.mask is not None:
+            seg_pred = seg_pred[data.mask]
+            y_true = y_true[data.mask]
 
+        loss = loss_func(seg_pred.view(-1, 1), y_true.view(-1, 1).type(torch.float))
         test_loss += loss.item() * batch_size
 
-        seg_np = data.y.cpu().numpy()
+        seg_np = y_true.cpu().numpy()
         pred_np = seg_pred.detach().cpu().numpy()
         test_true_seg.append(seg_np.reshape(-1))
         test_pred_seg.append(pred_np.reshape(-1))
@@ -110,10 +114,13 @@ def roc_auc(model, device, test_dl, truth_threshold=0.8):
     for data in test_dl:
 
         ei = None
+        mask = None
+
         if isinstance(data, Data):
             b = data.x
             l = data.y
-            ei = data.edge_index
+            ei = data.edge_index.to(device)
+            mask = data.mask
         else:
             b, l = data
 
@@ -125,7 +132,12 @@ def roc_auc(model, device, test_dl, truth_threshold=0.8):
         else:
             model_pred = model(b, ei)
 
-        y_pred += model_pred.detach().cpu().reshape(-1).tolist()
+        model_pred = model_pred.detach().cpu().reshape(-1)
+        if mask is not None:
+            model_pred = model_pred[mask]
+            l = l[mask]
+
+        y_pred += model_pred.tolist()
         y_true += (l > truth_threshold).type(torch.int).tolist()
 
     return roc_auc_score(y_true, y_pred)
@@ -157,10 +169,12 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
         for data in test_dl:
 
             ei = None
+            mask = None
             if isinstance(data, Data):
                 b = data.x
                 l = data.y
-                ei = data.edge_index
+                ei = data.edge_index.to(device)
+                mask = data.mask
             else:
                 b, l = data
 
@@ -173,6 +187,11 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8
                 model_pred = model(b, ei)
 
             model_pred = model_pred.detach().cpu().reshape(-1)
+
+            if mask is not None:
+                model_pred = model_pred[mask]
+                l = l[mask]
+
             pred += (model_pred > th).type(torch.int).tolist()
             lab += (l > truth_threshold).type(torch.int).tolist()
 

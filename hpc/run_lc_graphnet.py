@@ -1,5 +1,6 @@
 # %%
 import torch
+import numpy as np
 
 import sys
 import torch.nn as nn
@@ -9,6 +10,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from torch.utils.data import random_split
 from torch_geometric.loader import DataLoader
+import torch_geometric.transforms as T
 
 from reco.model import EdgeConvBlock
 
@@ -33,12 +35,18 @@ def knn_transform(data):
     data.edge_index = knn_graph(data.x[:,1:4], k=8, loop=False)
     return data
 
-# %%
+def create_mask(data):
+    # extract the focus feature
+    data.mask = (1 - data.x[:,0]).type(torch.bool)
+    return data
+
+transforms = T.Compose([knn_transform, create_mask])
+
 ds = LCGraphPU(
     ds_name + ".2",
     data_root,
     raw_dir,
-    transform=knn_transform,
+    transform=transforms,
     N_FILES=464,
     radius=10,
 )
@@ -58,8 +66,14 @@ test_dl = DataLoader(test_set, batch_size=32, shuffle=True)
 print("Labels (one per layer-cluster):", len(ds.data.y))
 
 # %%
-balance = float(sum(ds.data.y > 0.8) / len(ds.data.y))
-print(f"dataset balance: {balance * 100:.2f}%")
+to_predict = []
+for data in ds:
+    to_predict += data.y[data.mask].tolist()
+
+query_labels = np.array(to_predict)
+
+balance = float(sum(query_labels > 0.8) / len(query_labels))
+print(f"dataset balance: {balance * 100:.2f}% (positive labels minus main trackster LCs)")
 
 # %%
 class LCGraphNet(nn.Module):
@@ -94,7 +108,7 @@ class LCGraphNet(nn.Module):
 # %%
 model = LCGraphNet(input_dim=ds.data.x.shape[1])
 epochs = 201
-model_path = f"models/LCGraphNetKNN.64.128.256.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
+model_path = f"models/LCGraphNet.KNN.mask.64.128.256.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
 
 # %%
 # alpha - percentage of negative edges
@@ -130,7 +144,7 @@ for epoch in range(epochs):
 torch.save(model.state_dict(), model_path)
 
 # %%
-print(roc_auc(model, device, test_dl))
+print(model_path)
 
 # %%
-print(model_path)
+print(roc_auc(model, device, test_dl))
