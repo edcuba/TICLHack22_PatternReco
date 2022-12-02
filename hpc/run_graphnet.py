@@ -23,8 +23,8 @@ from reco.datasetPU import TracksterGraphPU
 
 ds_name = "CloseByGamma200PUFull"
 
-data_root = "data"
-raw_dir = f"/Users/ecuba/data/{ds_name}"
+data_root = "/mnt/ceph/users/ecuba/processed"
+raw_dir = f"/mnt/ceph/users/ecuba/{ds_name}"
 
 # %%
 # CUDA Setup
@@ -85,16 +85,18 @@ class TracksterGraphNet(nn.Module):
         super(TracksterGraphNet, self).__init__()
 
         hdim1 = 64
+        in_dim2 = hdim1 + input_dim
         hdim2 = 128
-        hdim_fc = 256
+        in_dim_fc = hdim2 + in_dim2
+        hdim_fc = 128
 
         # EdgeConv
         self.graphconv1 = EdgeConvBlock(input_dim, hdim1)
-        self.graphconv2 = EdgeConvBlock(hdim1, hdim2)
+        self.graphconv2 = EdgeConvBlock(in_dim2, hdim2)
 
         # Edge features from node embeddings for classification
         self.edgenetwork = nn.Sequential(
-            nn.Linear(hdim2, hdim_fc),
+            nn.Linear(in_dim_fc, hdim_fc),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hdim_fc, output_dim),
@@ -108,11 +110,11 @@ class TracksterGraphNet(nn.Module):
 
 # %%
 model = TracksterGraphNet(input_dim=ds.data.x.shape[1])
-epochs = 101
-model_path = f"models/TracksterGraphNet.KNN.mask.64.128.256.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
+epochs = 201
+model_path = f"models/TracksterGraphNet.KNN.mask.skip.64.128.128.ns.{epochs}e-{ds_name}.{ds.RADIUS}.{ds.SCORE_THRESHOLD}.{ds.N_FILES}f.pt"
 
 # alpha - percentage of negative edges
-loss_func = FocalLoss(alpha=0.25, gamma=2)
+loss_func = FocalLoss(alpha=balance, gamma=2)
 
 model = model.to(device)
 optimizer = SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-4)

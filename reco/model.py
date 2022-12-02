@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from torch_geometric.nn import DynamicEdgeConv, EdgeConv
 
@@ -40,4 +41,5 @@ class EdgeConvBlock(nn.Module):
         self.graphconv = EdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr)
 
     def forward(self, X, edge_index):
-        return self.graphconv(X, edge_index)
+        H = self.graphconv(X, edge_index)
+        return torch.hstack((H, X))
