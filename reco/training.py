@@ -104,7 +104,7 @@ def split_geo_train_test(ds, batch_size=64, test_set_fraction=0.1):
 
 
 @torch.no_grad()
-def roc_auc(model, device, test_dl, truth_threshold=0.8):
+def roc_auc(model, device, test_dl, truth_threshold=0.7):
 
     y_pred = []
     y_true = []
@@ -144,7 +144,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.8):
 
 
 @torch.no_grad()
-def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.8, step=1, focus_metric="b_acc"):
+def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7, step=1, focus_metric="b_acc"):
     """
     Plot the precision/recall curve depending on the decision threshold
 
