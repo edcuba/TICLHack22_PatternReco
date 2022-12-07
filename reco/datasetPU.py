@@ -12,7 +12,7 @@ from torch_geometric.data import Data, InMemoryDataset
 
 from .dataset import FEATURE_KEYS, build_pair_tensor
 
-from .features import get_graph_level_features
+from .features import get_graph_level_features, get_min_max_z_points
 from .graphs import create_graph
 
 
@@ -116,7 +116,7 @@ class TracksterPairsPU(Dataset):
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
-        return list([f"TracksterPairsPU_{'_'.join(infos)}.pt"])
+        return list([f"TracksterPairsProdPU_{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):
@@ -153,7 +153,6 @@ class TracksterPairsPU(Dataset):
                 "position_x",
                 "position_y",
                 "position_z",
-                "energy",
             ])
 
             simtrackster_data = simtracksters.arrays([
@@ -166,7 +165,6 @@ class TracksterPairsPU(Dataset):
                 clusters_x = cluster_data["position_x"][eid]
                 clusters_y = cluster_data["position_y"][eid]
                 clusters_z = cluster_data["position_z"][eid]
-                clusters_e = cluster_data["energy"][eid]
 
                 # get trackster info
                 barycenter_x = trackster_data["barycenter_x"][eid]
@@ -178,7 +176,6 @@ class TracksterPairsPU(Dataset):
                 vertices_x = ak.Array([clusters_x[indices] for indices in vertices_indices])
                 vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
                 vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
-                vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
 
                 # get associations data
                 reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
@@ -212,30 +209,30 @@ class TracksterPairsPU(Dataset):
                     tracksters[k].array()[eid] for k in FEATURE_KEYS
                 ])
 
-                bigT_graph = create_graph(
+                big_minP, big_maxP = get_min_max_z_points(
                     vertices_x[bigT],
                     vertices_y[bigT],
                     vertices_z[bigT],
-                    vertices_e[bigT],
                 )
 
-                bigT_graph_features = get_graph_level_features(bigT_graph)
-
                 for recoTxId, distance in in_cone:
+
                     if recoTxId == bigT:
                         continue    # do not connect to itself
 
-                    recoTx_graph = create_graph(
+                    features = build_pair_tensor((bigT, recoTxId), trackster_features)
+
+                    minP, maxP = get_min_max_z_points(
                         vertices_x[recoTxId],
                         vertices_y[recoTxId],
                         vertices_z[recoTxId],
-                        vertices_e[recoTxId],
                     )
-                    recoTx_graph_features = get_graph_level_features(recoTx_graph)
 
-                    features = build_pair_tensor((bigT, recoTxId), trackster_features)
-                    features += bigT_graph_features
-                    features += recoTx_graph_features
+                    # add trackster axes
+                    features += big_minP
+                    features += big_maxP
+                    features += minP
+                    features += maxP
 
                     features.append(distance)
                     features.append(len(vertices_z[bigT]))
@@ -260,7 +257,7 @@ class TracksterPairsPU(Dataset):
             f"radius={self.RADIUS}",
             f"score_threshold={self.SCORE_THRESHOLD}"
         ]
-        return f"<TracksterPairsPU {' '.join(infos)}>"
+        return f"<TracksterPairsProdPU {' '.join(infos)}>"
 
 
 

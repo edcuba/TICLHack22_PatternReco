@@ -59,3 +59,8 @@ def get_graph_level_features(G):
         mean_clustering_coefficient(G),
         longest_path_from_highest_centrality(G),
     ]
+
+def get_min_max_z_points(vx, vy, vz):
+    min_point = np.argmin(vz)
+    max_point = np.argmax(vz)
+    return (vx[min_point], vy[min_point], vz[min_point]), (vx[max_point], vy[max_point], vz[max_point])
