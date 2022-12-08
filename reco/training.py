@@ -215,3 +215,28 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7
     tn, fp, fn, tp = cm[bi]
     print(f"TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}")
     print(f"TH: {decision_th}", " ".join([f"{k}: {v[bi]:.3f}" for k, v in result.items()]))
+
+
+def train_mlp(model, device, opt, loader, loss_obj):
+    epoch_loss = 0
+    for batch, labels in loader:
+        # reset optimizer and enable training mode
+        opt.zero_grad()
+        model.train()
+
+        # move data to the device
+        batch = batch.to(device)
+        labels = labels.to(device)
+
+        # get the prediction tensor
+        z = model(batch).reshape(-1)
+
+        # compute the loss
+        loss = loss_obj(z, labels)
+        epoch_loss += loss
+
+        # back-propagate and update the weight
+        loss.backward()
+        opt.step()
+
+    return float(epoch_loss)
