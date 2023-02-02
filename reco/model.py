@@ -36,10 +36,13 @@ class DynamicEdgeConvBlock(nn.Module):
 
 class EdgeConvBlock(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim, aggr="add"):
+    def __init__(self, input_dim, hidden_dim, aggr="add", skip=False):
         super(EdgeConvBlock, self).__init__()
+        self.skip = skip
         self.graphconv = EdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr)
 
     def forward(self, X, edge_index):
         H = self.graphconv(X, edge_index)
-        return torch.hstack((H, X))
+        if self.skip: return torch.hstack((H, X))
+        return H
+

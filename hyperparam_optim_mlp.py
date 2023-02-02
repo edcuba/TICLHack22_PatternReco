@@ -100,7 +100,7 @@ config = {
     "hdim2": tune.choice([8, 16, 32, 64, 128, 256]),
     "hdim3": tune.choice([8, 16, 32, 64, 128, 256]),
     "lr": tune.loguniform(1e-4, 1e-2),
-    "batch_size": tune.choice([8, 16, 32, 64]),
+    "batch_size": tune.choice([16, 32, 64]),
     "dropout": tune.loguniform(0.1, 0.5),
     "focal_alpha": tune.loguniform(0.1, 0.9),
     "optimizer": tune.choice(["sgd", "adam"]),

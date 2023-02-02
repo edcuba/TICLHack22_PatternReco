@@ -78,6 +78,7 @@ class TracksterPairsPU(Dataset):
             N_FILES=None,
             radius=10,
             score_threshold=0.2,
+            prod=True
         ):
         self.name = name
         self.N_FILES = N_FILES
@@ -86,6 +87,7 @@ class TracksterPairsPU(Dataset):
         self.raw_data_path = raw_data_path
         self.root_dir = root_dir
         self.transform = transform
+        self.prod = prod
         fn = self.processed_paths[0]
 
         if not path.exists(fn):
@@ -116,7 +118,8 @@ class TracksterPairsPU(Dataset):
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
-        return list([f"TracksterPairsProdPU_{'_'.join(infos)}.pt"])
+        p = 'Prod' if self.prod else ''
+        return list([f"TracksterPairs{p}PU_{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):

@@ -89,6 +89,11 @@ class LCGraphPU(InMemoryDataset):
                 "position_y",
                 "position_z",
                 "energy",
+                "position_eta",
+                "position_phi",
+                "cluster_local_density",
+                "cluster_layer_id",
+                "cluster_radius",
             ])
 
             simtrackster_data = simtracksters.arrays([
@@ -103,6 +108,12 @@ class LCGraphPU(InMemoryDataset):
                 clusters_z = cluster_data["position_z"][eid]
                 clusters_e = cluster_data["energy"][eid]
 
+                clusters_eta = cluster_data["position_eta"][eid]
+                clusters_phi = cluster_data["position_phi"][eid]
+                clusters_ld = cluster_data["cluster_local_density"][eid]
+                clusters_r = cluster_data["cluster_radius"][eid]
+                clusters_lid = cluster_data["cluster_layer_id"][eid]
+
                 # get trackster info
                 barycenter_x = trackster_data["barycenter_x"][eid]
                 barycenter_y = trackster_data["barycenter_y"][eid]
@@ -114,6 +125,12 @@ class LCGraphPU(InMemoryDataset):
                 vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
                 vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
                 vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
+
+                vertices_eta = ak.Array([clusters_eta[indices] for indices in vertices_indices])
+                vertices_phi = ak.Array([clusters_phi[indices] for indices in vertices_indices])
+                vertices_ld = ak.Array([clusters_ld[indices] for indices in vertices_indices])
+                vertices_r = ak.Array([clusters_r[indices] for indices in vertices_indices])
+                vertices_lid = ak.Array([clusters_lid[indices] for indices in vertices_indices])
 
                 # get associations data
                 reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
@@ -145,14 +162,20 @@ class LCGraphPU(InMemoryDataset):
                 in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
                 indexes = [idx for idx, _ in in_cone]
 
-                # LC coordinates
-                tvx = ak.flatten(vertices_x[indexes])
-                tvy = ak.flatten(vertices_y[indexes])
-                tvz = ak.flatten(vertices_z[indexes])
-                tve = ak.flatten(vertices_e[indexes])
-
-                # focus feature
-                ftf = ak.flatten(list([int(idx == bigT)] * len(vertices_z[idx]) for idx in indexes))
+                # merge tracksters together
+                features = [
+                    # focus feature
+                    list([int(idx == bigT)] * len(vertices_z[idx]) for idx in indexes),
+                    vertices_x[indexes],
+                    vertices_y[indexes],
+                    vertices_z[indexes],
+                    vertices_e[indexes],
+                    vertices_eta[indexes],
+                    vertices_phi[indexes],
+                    vertices_ld[indexes],
+                    vertices_lid[indexes],
+                    vertices_r[indexes],
+                ]
 
                 # label
                 lc_labels = ak.flatten(list([1 - reco2sim_score[idx][0]] * len(vertices_z[idx]) for idx in indexes))
@@ -161,7 +184,7 @@ class LCGraphPU(InMemoryDataset):
                 tr_indexes = ak.flatten(list([i] * len(vertices_z[idx]) for i, idx in enumerate(indexes)))
 
                 data_list.append(Data(
-                    x=torch.tensor((ftf, tvx, tvy, tvz, tve)).T,
+                    x=torch.tensor([ak.flatten(f) for f in features]).T,
                     y=torch.tensor(lc_labels),
                     trackster_index=torch.tensor(tr_indexes, dtype=torch.int64),
                 ))

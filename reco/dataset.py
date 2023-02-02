@@ -21,6 +21,8 @@ FEATURE_KEYS = [
     "barycenter_x",
     "barycenter_y",
     "barycenter_z",
+    "trackster_barycenter_eta",
+    "trackster_barycenter_phi",
     "raw_energy",       # total energy
     "raw_em_energy",    # electro-magnetic energy
     "EV1",              # eigenvalues of 1st principal component
