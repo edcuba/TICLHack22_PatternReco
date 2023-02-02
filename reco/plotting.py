@@ -61,17 +61,13 @@ def plot_sim_reco(
     sve,
     svi,
     svm,
-    legend=True,
     zoom=1,
-    figsize=(12, 10),
+    fig=None,
     align_dim=True,
     energy_threshold=1,
 ):
     # get approximate plottable area
-
-
-    fig = plt.figure(figsize=figsize)
-
+    fig = fig or plt.figure(figsize=(12, 10))
     xlim, ylim, zlim = get_event_window(svx, svy, svz, sve, zoom=zoom, e_threshold=energy_threshold)
 
     ax2 = fig.add_subplot(122, projection='3d')
@@ -105,11 +101,6 @@ def plot_sim_reco(
             _te.append(e)
         plot_trackster(ax2, ti, _tx, _ty, _tz, _te)
 
-    ax2.set_title(f"Simulation layer-clusters ({len(svx)})")
-
-    if legend:
-        ax2.legend()
-
     # plot reco
     if not align_dim:
         xlim, ylim, zlim = get_event_window(vx, vy, vz, ve, zoom=zoom, e_threshold=energy_threshold)
@@ -119,10 +110,6 @@ def plot_sim_reco(
     ax1.set_ylim(ylim)
     ax1.set_zlim(zlim)
     plot_tracksters(ax1, vx, vy, vz, ve)
-
-    ax1.set_title(f"Reconstruction layer-clusters ({len(vx)})")
-    if legend:
-        ax1.legend()
 
     return ax1, ax2
 

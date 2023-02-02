@@ -39,6 +39,7 @@ def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
     Input:
         t_vertices: array of vertex IDs in dimensions (tracksters, vertices)
         t_multiplicity: array of vertex multiplicities in dims (tracksters, vertices)
+        f_min: minimum energy fraction
 
     Output:
         {vertex: [(trackster_id, energy_fraction)]}

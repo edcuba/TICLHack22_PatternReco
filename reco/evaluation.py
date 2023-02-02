@@ -21,32 +21,23 @@ def f_score(precision, recall, beta=1):
     return ((1 + beta**2) * precision * recall) / ((precision * beta**2) + recall)
 
 
-def B(i, j, mapping):
+def B(it, jt):
     """
-    i and j are in the same trackster on one side
-    are they also in a same trackster on the other side?
+    Consider that it and jt are in the same objects in one clustering
+    Are they in the same objects in the other clustering as well?
     """
+    # compute the intersection
+    fr_inter = 0.
+    for it_x, it_f in it:
+        for jt_x, jt_f in jt:
+            if it_x == jt_x:
+                fr_inter += it_f + jt_f
 
-    # no mapping, no match
-    if not i in mapping or not j in mapping:
-        return 0
+    # compute the union
+    fr_union = sum(it_f for _, it_f in it) + sum(jt_f for _, jt_f in jt)
 
-    # get (sim-)tracksters of i and j on the other side
-    it = np.array(mapping[i])
-    jt = np.array(mapping[j])
-
-    # find out how many are matching
-    _, i_idx, j_idx, = np.intersect1d(it[:,0], jt[:,0], return_indices=True)
-
-    # sum of the intersection
-    i_match_sum = it[i_idx][:,1].sum()
-    j_match_sum = jt[j_idx][:,1].sum()
-
-    # sum of the union
-    i_sum = it[:,1].sum()
-    j_sum = jt[:,1].sum()
-
-    return (i_match_sum + j_match_sum) / (i_sum + j_sum)
+    # compute the intersection over union
+    return fr_inter / fr_union
 
 
 def get_pairwise_scores(i, V, i2t, te_map):
@@ -57,28 +48,29 @@ def get_pairwise_scores(i, V, i2t, te_map):
         i       target LC
         V       L or C - all LCs of the trackster or simtrackster
         i2t     mapping from LC to its trackster or simtracksters on the oposite side
-        te_map  (optional) LC -> energy in the given trackster
+        te_map  LC -> energy in the given trackster
     Output:
         Normalized sum of the pair-wise scores
     """
     e_pairs = 0
     i_trackster_score = 0
+
     # for all vertices of the trackster
     for j in V:
-        pair_score = B(i, j, i2t)
-        if te_map:
+        # get the pair energy
+        e_pair = te_map[i] * te_map[j]
+        e_pairs += e_pair
+
+        # get (sim-)tracksters of i and j on the other side
+        if i in i2t and j in i2t:
+            pair_score = B(i2t[i], i2t[j])
             # multiply the score by the pair energy
-            e_pair = (te_map[i] * te_map[j])**2
-            pair_score *= e_pair
-            e_pairs += e_pair
-        i_trackster_score += pair_score
+            i_trackster_score += pair_score * e_pair
 
-    if e_pairs:
-        return i_trackster_score / e_pairs
-    return i_trackster_score / len(V)
+    return i_trackster_score / e_pairs
 
 
-def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
+def bcubed(vertices, t_vertices, i2a, i2b, e_map):
     """
     Base algorithm for bcubed precision and recall
     Input:
@@ -91,7 +83,7 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
                 layercluster to tracksters map
                 layercluster to simtracksters map
             recall: reverse order (i2b, i2a)
-        e_map (optional):
+        e_map:
             precision: LC to energy in a trackster
             recall: LC to energy in a simtrackster
     Returns: precision / recall for the given input
@@ -104,10 +96,8 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map=None):
 
         # get score for each trackster/simtrackster i is in
         for i_trackster, _ in i_tracksters:
-            # intersection required for recall (as the points are filtered)
-            V = np.intersect1d(t_vertices[i_trackster], vertices)
-
-            te_map = e_map[i_trackster] if e_map else None
+            V = t_vertices[int(i_trackster)]
+            te_map = e_map[int(i_trackster)]
 
             # normalize by the number of tracksters and add to the outer P sum
             P += get_pairwise_scores(i, V, i2b, te_map) / len(i_tracksters)
@@ -128,8 +118,8 @@ def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_mi
     te_map = get_energy_map(t_indexes, t_energy, v_multi)
     ste_map = get_energy_map(st_indexes, st_energy, sv_multi)
 
-    precision = bcubed(t_vertices, t_indexes, i2rt, i2st, e_map=te_map)
-    recall = bcubed(st_vertices, st_indexes, i2st, i2rt, e_map=ste_map)
+    precision = bcubed(t_vertices, t_indexes, i2rt, i2st, te_map)
+    recall = bcubed(st_vertices, st_indexes, i2st, i2rt, ste_map)
 
     return precision, recall, f_score(precision, recall, beta=beta)
 
