@@ -58,7 +58,7 @@ def get_pairwise_scores(i, V, i2t, te_map):
     # for all vertices of the trackster
     for j in V:
         # get the pair energy
-        e_pair = te_map[i] * te_map[j]
+        e_pair = (te_map[i] * te_map[j])**2
         e_pairs += e_pair
 
         # get (sim-)tracksters of i and j on the other side
