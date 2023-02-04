@@ -39,8 +39,8 @@ def create_graph(trk_x, trk_y, trk_z, trk_energy, trk_lc_index=None, N=1, higher
             # filter nodes with lower energy
             candidate_nodes = filter(lambda x: trk_energy[x] > trk_energy[i], idx_by_distance)
         else:
-            # exclude the node itself
-            candidate_nodes = idx_by_distance[1:]
+            # filter out existing edges and node itself
+            candidate_nodes = filter(lambda x: not G.has_edge(i, x), idx_by_distance[1:])
 
         # add first N nodes with a higher energy
         for c, idx in enumerate(candidate_nodes):
