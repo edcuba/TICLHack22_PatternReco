@@ -173,7 +173,8 @@ def plot_graph_3D(G, ax=None, edges=True, s=30):
             clr.append(G.nodes[k].get("color", "blue"))
 
         lc_size = np.array(ei) * s
-        ax.scatter(xi, yi, zi, s=lc_size, c=clr, cmap='rainbow')
+        #ax.scatter(xi, yi, zi, s=lc_size, c=clr, cmap='rainbow')
+        ax.scatter(xi, yi, zi, s=lc_size)
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted

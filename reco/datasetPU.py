@@ -191,60 +191,55 @@ class TracksterPairsPU(Dataset):
                     sim_raw_energy,
                 )
 
-                if not bigTs:
-                    continue
-
-                assert len(bigTs) == 1  # 1 particle with PU
-                bigT = bigTs[0]
-
-                x1, x2 = get_trackster_representative_points(
-                    barycenter_x[bigT],
-                    barycenter_y[bigT],
-                    barycenter_z[bigT],
-                    min(vertices_z[bigT]),
-                    max(vertices_z[bigT])
-                )
-
-                barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
-                in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
-
-                trackster_features = list([
-                    tracksters[k].array()[eid] for k in FEATURE_KEYS
-                ])
-
-                big_minP, big_maxP = get_min_max_z_points(
-                    vertices_x[bigT],
-                    vertices_y[bigT],
-                    vertices_z[bigT],
-                )
-
-                for recoTxId, distance in in_cone:
-
-                    if recoTxId == bigT:
-                        continue    # do not connect to itself
-
-                    features = build_pair_tensor((bigT, recoTxId), trackster_features)
-
-                    minP, maxP = get_min_max_z_points(
-                        vertices_x[recoTxId],
-                        vertices_y[recoTxId],
-                        vertices_z[recoTxId],
+                for bigT in bigTs:
+                    x1, x2 = get_trackster_representative_points(
+                        barycenter_x[bigT],
+                        barycenter_y[bigT],
+                        barycenter_z[bigT],
+                        min(vertices_z[bigT]),
+                        max(vertices_z[bigT])
                     )
 
-                    # add trackster axes
-                    features += big_minP
-                    features += big_maxP
-                    features += minP
-                    features += maxP
+                    barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
+                    in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
 
-                    features.append(distance)
-                    features.append(len(vertices_z[bigT]))
-                    features.append(len(vertices_z[recoTxId]))
+                    trackster_features = list([
+                        tracksters[k].array()[eid] for k in FEATURE_KEYS
+                    ])
 
-                    label = 1 - reco2sim_score[recoTxId][0]
+                    big_minP, big_maxP = get_min_max_z_points(
+                        vertices_x[bigT],
+                        vertices_y[bigT],
+                        vertices_z[bigT],
+                    )
 
-                    dataset_X.append(features)
-                    dataset_Y.append(label)
+                    for recoTxId, distance in in_cone:
+
+                        if recoTxId == bigT:
+                            continue    # do not connect to itself
+
+                        features = build_pair_tensor((bigT, recoTxId), trackster_features)
+
+                        minP, maxP = get_min_max_z_points(
+                            vertices_x[recoTxId],
+                            vertices_y[recoTxId],
+                            vertices_z[recoTxId],
+                        )
+
+                        # add trackster axes
+                        features += big_minP
+                        features += big_maxP
+                        features += minP
+                        features += maxP
+
+                        features.append(distance)
+                        features.append(len(vertices_z[bigT]))
+                        features.append(len(vertices_z[recoTxId]))
+
+                        label = 1 - reco2sim_score[recoTxId][0]
+
+                        dataset_X.append(features)
+                        dataset_Y.append(label)
 
         torch.save((dataset_X, dataset_Y), self.processed_paths[0])
 

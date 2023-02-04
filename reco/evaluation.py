@@ -106,9 +106,10 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map):
     return P / len(vertices)
 
 
-def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, beta=2, noise=True):
+def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, beta=2):
+    # TODO: ignore single hit LCs
     t_vertices = ak.flatten(t_indexes)
-    st_vertices = ak.flatten(st_indexes) if noise else t_vertices
+    st_vertices = ak.flatten(st_indexes)
 
     # precompute LC -> Trackster mapping
     i2rt = get_trackster_map(t_indexes, v_multi)
