@@ -66,6 +66,96 @@ def get_major_PU_tracksters(
     return big
 
 
+def get_event_pairs(cluster_data, trackster_data, simtrackster_data, assoc_data, eid, radius):
+
+    dataset_X = []
+    dataset_Y = []
+    pair_index = []
+
+    # get LC info
+    clusters_x = cluster_data["position_x"][eid]
+    clusters_y = cluster_data["position_y"][eid]
+    clusters_z = cluster_data["position_z"][eid]
+
+    # get trackster info
+    barycenter_x = trackster_data["barycenter_x"][eid]
+    barycenter_y = trackster_data["barycenter_y"][eid]
+    barycenter_z = trackster_data["barycenter_z"][eid]
+
+    # reconstruct trackster LC info
+    vertices_indices = trackster_data["vertices_indexes"][eid]
+    vertices_x = ak.Array([clusters_x[indices] for indices in vertices_indices])
+    vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
+    vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
+
+    # get associations data
+    reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
+    reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
+    reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
+    sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
+
+    # bigTs = get_major_PU_tracksters(
+    #     zip(reco2sim_index, reco2sim_sharedE, reco2sim_score),
+    #     sim_raw_energy,
+    # )
+
+    # select tracksters above 50GeV
+    bigTs = np.nonzero(trackster_data["raw_energy"][eid] > 50)[0].tolist()
+
+    for bigT in bigTs:
+        x1, x2 = get_trackster_representative_points(
+            barycenter_x[bigT],
+            barycenter_y[bigT],
+            barycenter_z[bigT],
+            min(vertices_z[bigT]),
+            max(vertices_z[bigT])
+        )
+
+        barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
+        in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=radius)
+
+        trackster_features = list([
+            trackster_data[k][eid] for k in FEATURE_KEYS
+        ])
+
+        big_minP, big_maxP = get_min_max_z_points(
+            vertices_x[bigT],
+            vertices_y[bigT],
+            vertices_z[bigT],
+        )
+
+        for recoTxId, distance in in_cone:
+
+            if recoTxId in bigTs:
+                continue    # do not connect large tracksters
+
+            features = build_pair_tensor((bigT, recoTxId), trackster_features)
+
+            minP, maxP = get_min_max_z_points(
+                vertices_x[recoTxId],
+                vertices_y[recoTxId],
+                vertices_z[recoTxId],
+            )
+
+            # add trackster axes
+            features += big_minP
+            features += big_maxP
+            features += minP
+            features += maxP
+
+            features.append(distance)
+            features.append(len(vertices_z[bigT]))
+            features.append(len(vertices_z[recoTxId]))
+
+            label = 1 - reco2sim_score[recoTxId][0]
+
+            dataset_X.append(features)
+            dataset_Y.append(label)
+            pair_index.append((recoTxId, bigT))
+
+    return dataset_X, dataset_Y, pair_index
+
+
 class TracksterPairsPU(Dataset):
     # output is about 250kb per file
 
@@ -77,8 +167,7 @@ class TracksterPairsPU(Dataset):
             transform=None,
             N_FILES=None,
             radius=10,
-            score_threshold=0.2,
-            prod=True
+            score_threshold=0.2
         ):
         self.name = name
         self.N_FILES = N_FILES
@@ -87,7 +176,6 @@ class TracksterPairsPU(Dataset):
         self.raw_data_path = raw_data_path
         self.root_dir = root_dir
         self.transform = transform
-        self.prod = prod
         fn = self.processed_paths[0]
 
         if not path.exists(fn):
@@ -118,8 +206,7 @@ class TracksterPairsPU(Dataset):
             f"r{self.RADIUS}",
             f"s{self.SCORE_THRESHOLD}"
         ]
-        p = 'Prod' if self.prod else ''
-        return list([f"TracksterPairs{p}PU_{'_'.join(infos)}.pt"])
+        return list([f"TracksterPairs_{'_'.join(infos)}.pt"])
 
     @property
     def processed_paths(self):
@@ -146,11 +233,8 @@ class TracksterPairsPU(Dataset):
             ])
 
             trackster_data = tracksters.arrays([
-                "barycenter_x",
-                "barycenter_y",
-                "barycenter_z",
-                "vertices_indexes"
-            ])
+                "vertices_indexes",
+            ] + FEATURE_KEYS)
 
             cluster_data = clusters.arrays([
                 "position_x",
@@ -163,83 +247,16 @@ class TracksterPairsPU(Dataset):
             ])
 
             for eid in range(len(trackster_data["barycenter_x"])):
-
-                # get LC info
-                clusters_x = cluster_data["position_x"][eid]
-                clusters_y = cluster_data["position_y"][eid]
-                clusters_z = cluster_data["position_z"][eid]
-
-                # get trackster info
-                barycenter_x = trackster_data["barycenter_x"][eid]
-                barycenter_y = trackster_data["barycenter_y"][eid]
-                barycenter_z = trackster_data["barycenter_z"][eid]
-
-                # reconstruct trackster LC info
-                vertices_indices = trackster_data["vertices_indexes"][eid]
-                vertices_x = ak.Array([clusters_x[indices] for indices in vertices_indices])
-                vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
-                vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
-
-                # get associations data
-                reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
-                reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
-                reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
-                sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
-
-                bigTs = get_major_PU_tracksters(
-                    zip(reco2sim_index, reco2sim_sharedE, reco2sim_score),
-                    sim_raw_energy,
+                dX, dY, _ = get_event_pairs(
+                    cluster_data,
+                    trackster_data,
+                    simtrackster_data,
+                    assoc_data,
+                    eid,
+                    self.RADIUS
                 )
-
-                for bigT in bigTs:
-                    x1, x2 = get_trackster_representative_points(
-                        barycenter_x[bigT],
-                        barycenter_y[bigT],
-                        barycenter_z[bigT],
-                        min(vertices_z[bigT]),
-                        max(vertices_z[bigT])
-                    )
-
-                    barycentres = np.array((barycenter_x, barycenter_y, barycenter_z)).T
-                    in_cone = get_tracksters_in_cone(x1, x2, barycentres, radius=self.RADIUS)
-
-                    trackster_features = list([
-                        tracksters[k].array()[eid] for k in FEATURE_KEYS
-                    ])
-
-                    big_minP, big_maxP = get_min_max_z_points(
-                        vertices_x[bigT],
-                        vertices_y[bigT],
-                        vertices_z[bigT],
-                    )
-
-                    for recoTxId, distance in in_cone:
-
-                        if recoTxId == bigT:
-                            continue    # do not connect to itself
-
-                        features = build_pair_tensor((bigT, recoTxId), trackster_features)
-
-                        minP, maxP = get_min_max_z_points(
-                            vertices_x[recoTxId],
-                            vertices_y[recoTxId],
-                            vertices_z[recoTxId],
-                        )
-
-                        # add trackster axes
-                        features += big_minP
-                        features += big_maxP
-                        features += minP
-                        features += maxP
-
-                        features.append(distance)
-                        features.append(len(vertices_z[bigT]))
-                        features.append(len(vertices_z[recoTxId]))
-
-                        label = 1 - reco2sim_score[recoTxId][0]
-
-                        dataset_X.append(features)
-                        dataset_Y.append(label)
+                dataset_X += dX
+                dataset_Y += dY
 
         torch.save((dataset_X, dataset_Y), self.processed_paths[0])
 
@@ -255,7 +272,7 @@ class TracksterPairsPU(Dataset):
             f"radius={self.RADIUS}",
             f"score_threshold={self.SCORE_THRESHOLD}"
         ]
-        return f"<TracksterPairsProdPU {' '.join(infos)}>"
+        return f"<TracksterPairs {' '.join(infos)}>"
 
 
 

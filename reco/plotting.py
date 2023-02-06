@@ -159,6 +159,10 @@ def plot_graph_3D(G, ax=None, edges=True, s=30):
             fig = plt.figure(figsize=(10, 7))
             ax = fig.add_subplot(111, projection='3d')
 
+        ax.set_xlabel("z (cm)")
+        ax.set_ylabel("x (cm)")
+        ax.set_zlabel("y (cm)")
+
         # Loop on the pos dictionary to extract the x,y,z coordinates of each node
         xi = []
         yi = []
@@ -170,11 +174,11 @@ def plot_graph_3D(G, ax=None, edges=True, s=30):
             yi.append(value[1])
             zi.append(value[2])
             ei.append(G.nodes[k].get("energy", 1))
-            clr.append(G.nodes[k].get("color", "blue"))
+            clr.append(G.nodes[k].get("color") or "#0072B2")
 
         lc_size = np.array(ei) * s
         #ax.scatter(xi, yi, zi, s=lc_size, c=clr, cmap='rainbow')
-        ax.scatter(xi, yi, zi, s=lc_size)
+        ax.scatter(zi, xi, yi, s=lc_size, c=clr)
 
         # Loop on the list of edges to get the x,y,z, coordinates of the connected nodes
         # Those two points are the extrema of the line to be plotted
@@ -185,7 +189,7 @@ def plot_graph_3D(G, ax=None, edges=True, s=30):
                 z = np.array((pos[j[0]][2], pos[j[1]][2]))
 
                 # Plot the connecting lines
-                ax.plot(x, y, z, c=G.edges[j].get("color", "black"), alpha=0.4)
+                ax.plot(z, x, y, c=G.edges[j].get("color", "black"), alpha=0.4)
     if ax == None:
         plt.show()
 

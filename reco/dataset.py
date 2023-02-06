@@ -197,6 +197,7 @@ def get_pair_tensor_builder(tracksters, eid, dst_map):
 
 
 class TracksterPairs(Dataset):
+    # XXX: deprecated
 
     def __init__(
             self,
@@ -208,6 +209,7 @@ class TracksterPairs(Dataset):
             MAX_DISTANCE=10,
             ENERGY_THRESHOLD=10,
         ):
+        print("Deprecated! Use TracksterPairsPU", file=sys.stderr)
         self.name = name
         self.N_FILES = N_FILES
         self.MAX_DISTANCE = MAX_DISTANCE

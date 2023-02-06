@@ -8,9 +8,11 @@ import torch_geometric.transforms as T
 
 from .graphs import create_graph
 from .energy import get_energy_map
-from .dataset import FEATURE_KEYS, get_ground_truth, get_pair_tensor_builder
-from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
+from .dataset import FEATURE_KEYS, get_ground_truth
+from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs, ARRAYS
 from .features import get_graph_level_features
+
+from .datasetPU import get_event_pairs
 
 
 def f_score(precision, recall, beta=1):
@@ -106,10 +108,19 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map):
     return P / len(vertices)
 
 
-def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_min=0, beta=2):
-    # TODO: ignore single hit LCs
+def evaluate(nhits, all_t_indexes, all_st_indexes, t_energy, st_energy, all_v_multi, all_sv_multi, f_min=0, beta=2, min_hits=1):
+
+    # prepare RECO indexes
+    lc_over_1_hit = ak.Array([nhits[t] > min_hits for t in all_t_indexes])
+    t_indexes = all_t_indexes[lc_over_1_hit]
+    v_multi = all_v_multi[lc_over_1_hit]
     t_vertices = ak.flatten(t_indexes)
-    st_vertices = ak.flatten(st_indexes)
+
+    # prepare SIM indexes
+    slc_over_1_hit = ak.Array([nhits[t] > min_hits for t in all_st_indexes])
+    st_indexes = all_st_indexes[slc_over_1_hit]
+    sv_multi = all_sv_multi[slc_over_1_hit]
+    st_vertices = ak.Array(set(ak.flatten(st_indexes)))
 
     # precompute LC -> Trackster mapping
     i2rt = get_trackster_map(t_indexes, v_multi)
@@ -125,11 +136,11 @@ def evaluate(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, f_mi
     return precision, recall, f_score(precision, recall, beta=beta)
 
 
-def evaluate_remapped(t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, labels, f_min=0, noise=True):
+def evaluate_remapped(nhits, t_indexes, st_indexes, t_energy, st_energy, v_multi, sv_multi, labels, f_min=0):
     ri = remap_arrays_by_label(t_indexes, labels)
     re = remap_arrays_by_label(t_energy, labels)
     rm = remap_arrays_by_label(v_multi, labels)
-    return evaluate(ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min, noise=noise)
+    return evaluate(nhits, ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min)
 
 
 def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwargs):
@@ -181,15 +192,12 @@ def pairwise_model_evaluation(
     tracksters,
     simtracksters,
     associations,
-    graphs,
+    clusters,
     model,
-    scaler,
-    decision_th,
-    max_distance=10,
-    energy_threshold=10,
+    decision_th=0.5,
+    radius=10,
     max_events=100,
     reco_to_target=False,
-    z_map=None,
 ):
     """
     Evaluation must be unbalanced
@@ -203,58 +211,58 @@ def pairwise_model_evaluation(
         "reco_to_sim": []
     }
 
+    trackster_data = tracksters.arrays(ARRAYS + FEATURE_KEYS)
+
+    cluster_data = clusters.arrays([
+        "position_x",
+        "position_y",
+        "position_z",
+    ])
+
+    assoc_data = associations.arrays([
+        "tsCLUE3D_recoToSim_SC",
+        "tsCLUE3D_recoToSim_SC_sharedE",
+        "tsCLUE3D_recoToSim_SC_score",
+    ])
+
+    simtrackster_data = simtracksters.arrays([
+        "stsSC_raw_energy",
+        "stsSC_vertices_indexes",
+        "stsSC_vertices_energy",
+        "stsSC_vertices_multiplicity"
+    ])
+
     if reco_to_target:
         results["reco_to_target"] = []
 
     for eid in range(min([len(nt), max_events])):
-        # get candidate pairs
-        candidate_pairs, dst_map = get_candidate_pairs(
-            tracksters,
-            graphs,
+
+        dX, dY, pair_index = get_event_pairs(
+            cluster_data,
+            trackster_data,
+            simtrackster_data,
+            assoc_data,
             eid,
-            max_distance=max_distance,
-            z_map=z_map
+            radius,
         )
-
-        if len(candidate_pairs) == 0:
-            print("skipping: no candidates")
-            continue
-
-        builder = get_pair_tensor_builder(tracksters, eid, dst_map)
-
-        # get target
-        gt = get_ground_truth(
-            tracksters,
-            simtracksters,
-            associations,
-            eid,
-            distance_threshold=max_distance,
-            energy_threshold=energy_threshold,
-        )
-
-        # prepare features
-        _scaled_samples = []
-        for edge in candidate_pairs:
-            sample = torch.tensor(builder(edge))
-            scaled = scaler.transform(sample.reshape(1,-1))
-            _scaled_samples.append(scaled)
-        samples = torch.tensor(np.array(_scaled_samples)).type(torch.float)
 
         # predict edges
-        preds = model(samples)
-        out = (preds.reshape(1,-1)[0].detach().numpy() > decision_th)
+        preds = model(dX)
+        truth = np.array(dY)
 
-        # map decisions
-        # !must be little -> big
-        # some tracksters happen to both on left and right here
-        re = tracksters["raw_energy"].array()[eid]
-        merge_map = {
-            a: b for (a, b), o in zip(candidate_pairs, out)
-            if o and re[a] < energy_threshold and re[b] > energy_threshold
+        # it has to be little -> big
+        reco_merge_map = {
+            a: b for (a, b), o in zip(pair_index, preds > decision_th) if o
+        }
+
+        # TODO: need to resolve conflicts here
+        sim_merge_map = {
+            a: b for (a, b), o in zip(pair_index, truth > decision_th) if o
         }
 
         # rebuild the event
-        reco = remap_tracksters(tracksters, merge_map, eid)
+        reco = remap_tracksters(trackster_data, reco_merge_map, eid)
+        target = remap_tracksters(trackster_data, sim_merge_map, eid)
 
         # reco
         re = reco["vertices_energy"]
@@ -262,27 +270,29 @@ def pairwise_model_evaluation(
         rm = reco["vertices_multiplicity"]
 
         # target
-        te = gt["vertices_energy"]
-        ti = gt["vertices_indexes"]
-        tm = gt["vertices_multiplicity"]
+        target_e = target["vertices_energy"]
+        target_i = target["vertices_indexes"]
+        target_m = target["vertices_multiplicity"]
 
         # clue3D
-        ce = tracksters["vertices_energy"].array()[eid]
-        ci = tracksters["vertices_indexes"].array()[eid]
-        cm = tracksters["vertices_multiplicity"].array()[eid]
+        ce = trackster_data["vertices_energy"][eid]
+        ci = trackster_data["vertices_indexes"][eid]
+        cm = trackster_data["vertices_multiplicity"][eid]
 
         # simulation
-        se = simtracksters["stsSC_vertices_energy"].array()[eid]
-        si = simtracksters["stsSC_vertices_indexes"].array()[eid]
-        sm = simtracksters["stsSC_vertices_multiplicity"].array()[eid]
+        se = simtrackster_data["stsSC_vertices_energy"][eid]
+        si = simtrackster_data["stsSC_vertices_indexes"][eid]
+        sm = simtrackster_data["stsSC_vertices_multiplicity"][eid]
 
-        results["clue3d_to_sim"].append(evaluate(ci, si, ce, se, cm, sm, noise=False))
-        results["target_to_sim"].append(evaluate(ti, si, te, se, tm, sm, noise=False))
+        nhits = clusters["cluster_number_of_hits"].array()[eid]
+
+        results["clue3d_to_sim"].append(evaluate(nhits, ci, si, ce, se, cm, sm))
+        results["target_to_sim"].append(evaluate(nhits, target_i, si, target_e, se, target_m, sm))
 
         if reco_to_target:
-            results["reco_to_target"].append(evaluate(ri, ti, re, te, rm, tm, noise=False))
+            results["reco_to_target"].append(evaluate(nhits, ri, target_i, re, target_e, rm, target_m))
 
-        results["reco_to_sim"].append(evaluate(ri, si, re, se, rm, sm, noise=False))
+        results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
 
         print(f"Event {eid}:")
         for key, values in results.items():

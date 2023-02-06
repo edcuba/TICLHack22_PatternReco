@@ -82,12 +82,12 @@ def remap_items_by_label(array, labels):
     return ak.Array(rm)
 
 
-def remap_tracksters(tracksters, new_mapping, eid):
+def remap_tracksters(trackster_data, new_mapping, eid):
     """
         provide a mapping in format (source: target)
     """
 
-    raw_e = tracksters["raw_energy"].array()[eid]
+    raw_e = trackster_data["raw_energy"][eid]
     new_idx_map = {}
     new_tracksters = []
 
@@ -106,7 +106,7 @@ def remap_tracksters(tracksters, new_mapping, eid):
         new_big_idx = new_idx_map[big]
         new_tracksters[new_big_idx].append(little)
 
-    datalist = list(tracksters[k].array()[eid] for k in ARRAYS)
+    datalist = list(trackster_data[k][eid] for k in ARRAYS)
     result = {
         k: ak.Array([ak.flatten(datalist[i][tlist]) for tlist in new_tracksters])
         for i, k in enumerate(ARRAYS)
