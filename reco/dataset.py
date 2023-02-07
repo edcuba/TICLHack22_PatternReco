@@ -9,32 +9,12 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big, get_candidate_pairs_little_big_planear
+from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big_planear, FEATURE_KEYS
 from .matching import match_best_simtrackster_direct, find_good_pairs_direct
 from .distance import euclidian_distance, apply_map
 
-from .graphs import get_graphs, create_graph
+from .graphs import create_graph
 from .features import get_graph_level_features
-
-
-FEATURE_KEYS = [
-    "barycenter_x",
-    "barycenter_y",
-    "barycenter_z",
-    "trackster_barycenter_eta",
-    "trackster_barycenter_phi",
-    "raw_energy",       # total energy
-    "raw_em_energy",    # electro-magnetic energy
-    "EV1",              # eigenvalues of 1st principal component
-    "EV2",
-    "EV3",
-    "eVector0_x",       # x of principal component
-    "eVector0_y",
-    "eVector0_z",
-    "sigmaPCA1",        # error in the 1st principal axis
-    "sigmaPCA2",
-    "sigmaPCA3",
-]
 
 
 
@@ -166,171 +146,8 @@ def get_ground_truth(
     return remap_tracksters(tracksters, merge_map, eid)
 
 
-def build_pair_tensor(edge, features):
-    a, b = edge
-    fa = [f[a] for f in features]
-    fb = [f[b] for f in features]
-    return fa + fb
-
-
-def get_pair_tensor_builder(tracksters, eid, dst_map):
-
-    # extract all trackster features
-    trackster_features = list([
-        tracksters[k].array()[eid] for k in FEATURE_KEYS
-    ])
-
-    # this is pricey (and so are the graph features)
-    graph_features = [
-        get_graph_level_features(g) for g in get_graphs(tracksters, eid)
-    ]
-
-    ve = tracksters["vertices_energy"].array()[eid]
-
-    return lambda edge: build_pair_tensor(edge, trackster_features) + [
-        dst_map[(edge[0], edge[1])],    # pairwise distance
-        len(ve[edge[0]]),               # num edges
-        len(ve[edge[1]]),               # num edges
-        *graph_features[edge[0]],
-        *graph_features[edge[1]],
-    ]
-
-
-class TracksterPairs(Dataset):
+class D_TracksterGraph(InMemoryDataset):
     # XXX: deprecated
-
-    def __init__(
-            self,
-            name,
-            root_dir,
-            raw_data_path,
-            transform=None,
-            N_FILES=10,
-            MAX_DISTANCE=10,
-            ENERGY_THRESHOLD=10,
-        ):
-        print("Deprecated! Use TracksterPairsPU", file=sys.stderr)
-        self.name = name
-        self.N_FILES = N_FILES
-        self.MAX_DISTANCE = MAX_DISTANCE
-        self.ENERGY_THRESHOLD = ENERGY_THRESHOLD
-        self.raw_data_path = raw_data_path
-
-        self.root_dir = root_dir
-        self.transform = transform
-
-        fn = self.processed_paths[0]
-
-        if not path.exists(fn):
-            self.process()
-
-        dx, dy = torch.load(fn)
-        self.x = torch.tensor(dx).type(torch.float)
-        self.y = torch.tensor(dy).type(torch.float)
-
-    @property
-    def raw_file_names(self):
-        files = []
-        for (_, _, filenames) in walk(self.raw_data_path):
-            files.extend(filenames)
-            break
-        full_paths = list([path.join(self.raw_data_path, f) for f in files])
-        assert len(full_paths) >= self.N_FILES
-        return full_paths[:self.N_FILES]
-
-    @property
-    def processed_file_names(self):
-        infos = [
-            self.name,
-            f"{self.N_FILES}f",
-            f"d{self.MAX_DISTANCE}",
-            f"e{self.ENERGY_THRESHOLD}"
-        ]
-        return list([f"pairs_{'_'.join(infos)}.pt"])
-
-    @property
-    def processed_paths(self):
-        return [path.join(self.root_dir, fn) for fn in self.processed_file_names]
-
-    def process(self):
-        """
-            for now, the dataset fits into the memory
-            store in one file and load at once
-
-            if needed, store in multiple files (processed file names)
-            and implement a get method
-        """
-        dataset_X = []
-        dataset_Y = []
-        for source in self.raw_file_names:
-            print(f"Processing: {source}")
-
-            tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
-            associations = uproot.open({source: "ticlNtuplizer/associations"})
-            graph = uproot.open({source: "ticlNtuplizer/graph"})
-
-            for eid in range(len(tracksters["vertices_x"].array())):
-
-                vx = tracksters["vertices_x"].array()[eid]
-                vy = tracksters["vertices_y"].array()[eid]
-                vz = tracksters["vertices_z"].array()[eid]
-                clouds = [np.array([vx[tid], vy[tid], vz[tid]]).T for tid in range(len(vx))]
-
-                raw_energy = tracksters["raw_energy"].array()[eid]
-                sim2reco_indices = np.array(associations["tsCLUE3D_simToReco_SC"].array()[eid])
-                sim2reco_shared_energy = np.array(associations["tsCLUE3D_simToReco_SC_sharedE"].array()[eid])
-                inners = graph["linked_inners"].array()[eid]
-
-                candidate_pairs, dst_map = get_candidate_pairs_little_big(
-                    clouds,
-                    inners,
-                    raw_energy,
-                    max_distance=self.MAX_DISTANCE,
-                    energy_threshold=self.ENERGY_THRESHOLD,
-                )
-
-                if len(candidate_pairs) == 0:
-                    continue
-
-                c_pairs = set(candidate_pairs)
-
-                matches = find_good_pairs_direct(
-                    sim2reco_indices,
-                    sim2reco_shared_energy,
-                    raw_energy,
-                    c_pairs,
-                )
-
-                positive = matches
-                negative = c_pairs - positive
-
-                builder = get_pair_tensor_builder(tracksters, eid, dst_map)
-                labels = [(positive, 1), (negative, 0)]
-
-                for edges, label in labels:
-                    for edge in edges:
-                        sample = builder(edge)
-                        dataset_X.append(sample)
-                        dataset_Y.append(label)
-
-        torch.save((dataset_X, dataset_Y), self.processed_paths[0])
-
-    def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
-
-    def __len__(self):
-        return len(self.y)
-
-    def __repr__(self):
-        infos = [
-            f"len={len(self)}",
-            f"max_distance={self.MAX_DISTANCE}",
-            f"energy_threshold={self.ENERGY_THRESHOLD}"
-        ]
-        return f"<TracksterPairs {' '.join(infos)}>"
-
-
-class TracksterGraph(InMemoryDataset):
 
     def __init__(
             self,
@@ -353,7 +170,7 @@ class TracksterGraph(InMemoryDataset):
         self.include_graph_features = include_graph_features
         self.root_dir = root_dir
 
-        super(TracksterGraph, self).__init__(root_dir, transform, pre_transform, pre_filter)
+        super(D_TracksterGraph, self).__init__(root_dir, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property

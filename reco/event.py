@@ -1,5 +1,6 @@
 import numpy as np
 import awkward as ak
+import uproot
 from .distance import euclidian_distance, apply_map
 
 
@@ -9,8 +10,58 @@ ARRAYS = [
     "vertices_z",
     "vertices_energy",
     "vertices_multiplicity",
-    "vertices_indexes"
+    "vertices_indexes",
 ]
+
+
+FEATURE_KEYS = [
+    "barycenter_x",
+    "barycenter_y",
+    "barycenter_z",
+    "trackster_barycenter_eta",
+    "trackster_barycenter_phi",
+    "raw_energy",       # total energy
+    "raw_em_energy",    # electro-magnetic energy
+    "EV1",              # eigenvalues of 1st principal component
+    "EV2",
+    "EV3",
+    "eVector0_x",       # x of principal component
+    "eVector0_y",
+    "eVector0_z",
+    "sigmaPCA1",        # error in the 1st principal axis
+    "sigmaPCA2",
+    "sigmaPCA3",
+]
+
+
+def get_data_arrays(clusters, tracksters, simtracksters, associations):
+    trackster_data = tracksters.arrays(ARRAYS + FEATURE_KEYS + ['id_probabilities'])
+    cluster_data = clusters.arrays([
+        "position_x",
+        "position_y",
+        "position_z",
+        "energy",
+    ])
+    simtrackster_data = simtracksters.arrays([
+        "stsSC_raw_energy",
+        "stsSC_vertices_indexes",
+        "stsSC_vertices_energy",
+        "stsSC_vertices_multiplicity"
+    ])
+    assoc_data = associations.arrays([
+        "tsCLUE3D_recoToSim_SC",
+        "tsCLUE3D_recoToSim_SC_sharedE",
+        "tsCLUE3D_recoToSim_SC_score",
+    ])
+    return cluster_data, trackster_data, simtrackster_data, assoc_data
+
+
+def get_event_data(source):
+    tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
+    simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
+    associations = uproot.open({source: "ticlNtuplizer/associations"})
+    clusters = uproot.open({source: "ticlNtuplizer/clusters"})
+    return get_data_arrays(clusters, tracksters, simtracksters, associations)
 
 
 def get_bary(tracksters, _eid, z_map=None):
@@ -19,6 +70,14 @@ def get_bary(tracksters, _eid, z_map=None):
         tracksters["barycenter_y"].array()[_eid],
         apply_map(tracksters["barycenter_z"].array()[_eid], z_map)
     ]).T
+
+def get_bary_data(trackster_data, _eid):
+    return np.array([
+        trackster_data["barycenter_x"][_eid],
+        trackster_data["barycenter_y"][_eid],
+        trackster_data["barycenter_z"][_eid],
+    ]).T
+
 
 
 def get_lc(tracksters, _eid):

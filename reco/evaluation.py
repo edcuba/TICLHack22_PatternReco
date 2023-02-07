@@ -9,7 +9,7 @@ import torch_geometric.transforms as T
 from .graphs import create_graph
 from .energy import get_energy_map
 from .dataset import FEATURE_KEYS, get_ground_truth
-from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs, ARRAYS
+from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs, get_data_arrays
 from .features import get_graph_level_features
 
 from .datasetPU import get_event_pairs
@@ -211,26 +211,12 @@ def pairwise_model_evaluation(
         "reco_to_sim": []
     }
 
-    trackster_data = tracksters.arrays(ARRAYS + FEATURE_KEYS)
-
-    cluster_data = clusters.arrays([
-        "position_x",
-        "position_y",
-        "position_z",
-    ])
-
-    assoc_data = associations.arrays([
-        "tsCLUE3D_recoToSim_SC",
-        "tsCLUE3D_recoToSim_SC_sharedE",
-        "tsCLUE3D_recoToSim_SC_score",
-    ])
-
-    simtrackster_data = simtracksters.arrays([
-        "stsSC_raw_energy",
-        "stsSC_vertices_indexes",
-        "stsSC_vertices_energy",
-        "stsSC_vertices_multiplicity"
-    ])
+    cluster_data, trackster_data, simtrackster_data, assoc_data = get_data_arrays(
+        clusters,
+        tracksters,
+        simtracksters,
+        associations
+    )
 
     if reco_to_target:
         results["reco_to_target"] = []
