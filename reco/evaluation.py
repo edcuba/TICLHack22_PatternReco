@@ -189,10 +189,10 @@ def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwarg
 
 
 def pairwise_model_evaluation(
-    tracksters,
-    simtracksters,
-    associations,
-    clusters,
+    cluster_data,
+    trackster_data,
+    simtrackster_data,
+    assoc_data,
     model,
     decision_th=0.5,
     radius=10,
@@ -202,7 +202,6 @@ def pairwise_model_evaluation(
     """
     Evaluation must be unbalanced
     """
-    nt = tracksters["NTracksters"].array()
     model.eval()
 
     results = {
@@ -211,17 +210,10 @@ def pairwise_model_evaluation(
         "reco_to_sim": []
     }
 
-    cluster_data, trackster_data, simtrackster_data, assoc_data = get_data_arrays(
-        clusters,
-        tracksters,
-        simtracksters,
-        associations
-    )
-
     if reco_to_target:
         results["reco_to_target"] = []
 
-    for eid in range(min([len(nt), max_events])):
+    for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
 
         dX, dY, pair_index = get_event_pairs(
             cluster_data,
@@ -270,7 +262,7 @@ def pairwise_model_evaluation(
         si = simtrackster_data["stsSC_vertices_indexes"][eid]
         sm = simtrackster_data["stsSC_vertices_multiplicity"][eid]
 
-        nhits = clusters["cluster_number_of_hits"].array()[eid]
+        nhits = cluster_data["cluster_number_of_hits"][eid]
 
         results["clue3d_to_sim"].append(evaluate(nhits, ci, si, ce, se, cm, sm))
         results["target_to_sim"].append(evaluate(nhits, target_i, si, target_e, se, target_m, sm))

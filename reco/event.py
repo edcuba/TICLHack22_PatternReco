@@ -41,6 +41,7 @@ def get_data_arrays(clusters, tracksters, simtracksters, associations):
         "position_y",
         "position_z",
         "energy",
+        "cluster_number_of_hits",
     ])
     simtrackster_data = simtracksters.arrays([
         "stsSC_raw_energy",

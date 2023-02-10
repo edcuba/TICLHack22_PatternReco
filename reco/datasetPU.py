@@ -3,7 +3,6 @@ from os import walk, path
 import sys
 
 import torch
-import uproot
 
 import numpy as np
 from torch.utils.data import Dataset
@@ -118,7 +117,8 @@ def get_event_pairs(
         assoc_data,
         eid,
         radius,
-        pileup=False
+        pileup=False,
+        bigT_e_th=50,
     ):
 
     dataset_X = []
@@ -137,11 +137,12 @@ def get_event_pairs(
     vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
 
     reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
+    reco2sim_idx = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
 
     # add id probabilities
     id_probs = trackster_data["id_probabilities"][eid].tolist()
 
-    bigTs = get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=pileup)
+    bigTs = get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=pileup, energy_th=bigT_e_th)
 
     trackster_features = list([
         trackster_data[k][eid] for k in FEATURE_KEYS
@@ -154,6 +155,13 @@ def get_event_pairs(
             vertices_y[bigT],
             vertices_z[bigT],
         )
+
+        # find index of the best score
+        bigT_best_score_idx = np.argmin(reco2sim_score[bigT])
+        # get the best score
+        bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
+        # figure out which simtrackster it is
+        bigT_simT_idx = reco2sim_idx[bigT][bigT_best_score_idx]
 
         in_cone = get_neighborhood(trackster_data, vertices_z, eid, radius, bigT)
 
@@ -182,7 +190,10 @@ def get_event_pairs(
             features.append(len(vertices_z[bigT]))
             features.append(len(vertices_z[recoTxId]))
 
-            label = 1 - reco2sim_score[recoTxId][0]
+            # find out the index of the simpartice we are looking for
+            recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
+            # get the score for the given simparticle and compute the score
+            label = (1 - bigT_best_score) * (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
 
             dataset_X.append(features)
             dataset_Y.append(label)
@@ -220,6 +231,7 @@ def get_event_graph(
 
     # get associations data
     reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
+    reco2sim_idx = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
 
     bigTs = get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=pileup)
 
@@ -232,6 +244,13 @@ def get_event_graph(
         node_features = []
         node_labels = []
         node_index = []
+
+        # find index of the best score
+        bigT_best_score_idx = np.argmin(reco2sim_score[bigT])
+        # get the best score
+        bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
+        # figure out which simtrackster it is
+        bigT_simT_idx = reco2sim_idx[bigT][bigT_best_score_idx]
 
         in_cone = get_neighborhood(trackster_data, vertices_z, eid, radius, bigT)
         for recoTxId, distance in in_cone:
@@ -261,8 +280,13 @@ def get_event_graph(
             features += [f[recoTxId] for f in trackster_features]
             features += get_graph_level_features(recoTx_graph)
 
+            # find out the index of the simpartice we are looking for
+            recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
+            # get the score for the given simparticle and compute the score
+            label = (1 - bigT_best_score) * (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
+
             node_features.append(features)
-            node_labels.append(1 - reco2sim_score[recoTxId][0])
+            node_labels.append(label)
             node_index.append(recoTxId)
 
         data_list.append(Data(
