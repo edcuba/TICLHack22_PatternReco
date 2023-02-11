@@ -188,6 +188,25 @@ def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwarg
     print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")
 
 
+
+def get_merge_map(pair_index, preds, threshold):
+    """
+        Performs the little-big mapping
+        Respects the highest prediction score for each little
+    """
+    merge_map = {}
+    score_map = {}
+
+    # should always be (little, big)
+    for (little, big), p in zip(pair_index, preds):
+        if p > threshold:
+            if not little in score_map or score_map[little] < p:
+                merge_map[little] = big
+                score_map[little] = p
+
+    return merge_map
+
+
 def pairwise_model_evaluation(
     cluster_data,
     trackster_data,
@@ -198,6 +217,7 @@ def pairwise_model_evaluation(
     radius=10,
     max_events=100,
     reco_to_target=False,
+    bigT_e_th=50,
 ):
     """
     Evaluation must be unbalanced
@@ -222,21 +242,16 @@ def pairwise_model_evaluation(
             assoc_data,
             eid,
             radius,
+            pileup=False,
+            bigT_e_th=bigT_e_th,
         )
 
         # predict edges
         preds = model(dX)
         truth = np.array(dY)
 
-        # it has to be little -> big
-        reco_merge_map = {
-            a: b for (a, b), o in zip(pair_index, preds > decision_th) if o
-        }
-
-        # TODO: need to resolve conflicts here
-        sim_merge_map = {
-            a: b for (a, b), o in zip(pair_index, truth > decision_th) if o
-        }
+        reco_merge_map = get_merge_map(pair_index, preds, decision_th)
+        sim_merge_map =  get_merge_map(pair_index, truth, decision_th)
 
         # rebuild the event
         reco = remap_tracksters(trackster_data, reco_merge_map, eid)

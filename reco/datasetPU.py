@@ -191,7 +191,7 @@ def get_event_pairs(
             features.append(len(vertices_z[recoTxId]))
 
             # find out the index of the simpartice we are looking for
-            recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
+            recoTx_bigT_simT_idx = np.nonzero(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
             # get the score for the given simparticle and compute the score
             label = (1 - bigT_best_score) * (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
 
