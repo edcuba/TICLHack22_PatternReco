@@ -312,6 +312,7 @@ class TracksterPairs(Dataset):
             radius=10,
             score_threshold=0.2,
             pileup=False,
+            bigT_e_th=40,
         ):
         self.name = name
         self.N_FILES = N_FILES
@@ -321,6 +322,7 @@ class TracksterPairs(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.pileup = pileup
+        self.bigT_e_th = bigT_e_th
         fn = self.processed_paths[0]
 
         if not path.exists(fn):
@@ -349,7 +351,8 @@ class TracksterPairs(Dataset):
             self.name,
             f"f{self.N_FILES or len(self.raw_file_names)}",
             f"r{self.RADIUS}",
-            f"s{self.SCORE_THRESHOLD}"
+            f"s{self.SCORE_THRESHOLD}",
+            f"eth{self.bigT_e_th}"
         ]
         return list([f"TracksterPairs{'PU' if self.pileup else ''}_{'_'.join(infos)}.pt"])
 
@@ -375,6 +378,7 @@ class TracksterPairs(Dataset):
                     eid,
                     self.RADIUS,
                     pileup=self.pileup,
+                    bigT_e_th=self.bigT_e_th,
                 )
                 dataset_X += dX
                 dataset_Y += dY
@@ -391,7 +395,8 @@ class TracksterPairs(Dataset):
         infos = [
             f"len={len(self)}",
             f"radius={self.RADIUS}",
-            f"score_threshold={self.SCORE_THRESHOLD}"
+            f"score_threshold={self.SCORE_THRESHOLD}",
+            f"bigT_e_th={self.bigT_e_th}",
         ]
         return f"<TracksterPairs {' '.join(infos)}>"
 

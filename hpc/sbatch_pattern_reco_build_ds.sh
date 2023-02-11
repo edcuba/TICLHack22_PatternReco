@@ -1,14 +1,11 @@
 #!/bin/sh
 
 #SBATCH --partition=genx
-#SBATCH --time=1-0
+#SBATCH --time=7-0
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=1
-#SBATCH --job-name=ticl_build_ds
-
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --cpus-per-task=8
+#SBATCH --job-name=reco_ds_pair
 
 # Load dependencies
 module load python
