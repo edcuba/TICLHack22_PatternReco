@@ -247,7 +247,7 @@ def pairwise_model_evaluation(
         )
 
         # predict edges
-        preds = model(dX)
+        preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
         truth = np.array(dY)
 
         reco_merge_map = get_merge_map(pair_index, preds, decision_th)

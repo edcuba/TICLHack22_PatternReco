@@ -7,6 +7,9 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --job-name=reco_ds_pair
 
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
 # Load dependencies
 module load python
 
