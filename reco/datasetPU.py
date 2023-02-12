@@ -8,12 +8,9 @@ import numpy as np
 from torch.utils.data import Dataset
 from torch_geometric.data import Data, InMemoryDataset
 
-
-from .dataset import FEATURE_KEYS
-
 from .features import get_graph_level_features, get_min_max_z_points
 from .graphs import create_graph
-from .event import get_event_data
+from .data import get_event_data, FEATURE_KEYS
 
 
 def build_pair_tensor(edge, features):

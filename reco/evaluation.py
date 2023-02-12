@@ -8,8 +8,9 @@ import torch_geometric.transforms as T
 
 from .graphs import create_graph
 from .energy import get_energy_map
-from .dataset import FEATURE_KEYS, get_ground_truth
-from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs, get_data_arrays
+from .data import FEATURE_KEYS
+from .dataset import get_ground_truth
+from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
 from .features import get_graph_level_features
 
 from .datasetPU import get_event_pairs

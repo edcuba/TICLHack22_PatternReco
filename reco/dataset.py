@@ -9,7 +9,8 @@ from torch.utils.data import Dataset
 
 from torch_geometric.data import Data, InMemoryDataset
 
-from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big_planear, FEATURE_KEYS
+from .data import FEATURE_KEYS
+from .event import get_bary, get_candidate_pairs_direct, remap_tracksters, get_candidate_pairs_little_big_planear
 from .matching import match_best_simtrackster_direct, find_good_pairs_direct
 from .distance import euclidian_distance, apply_map
 
