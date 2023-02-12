@@ -194,17 +194,6 @@ def plot_graph_3D(G, ax=None, edges=True, s=30):
         plt.show()
 
 
-def plot_remapped(tracksters, eid, labels):
-    rx = remap_arrays_by_label(tracksters["vertices_x"].array()[eid], labels)
-    ry = remap_arrays_by_label(tracksters["vertices_y"].array()[eid], labels)
-    rz = remap_arrays_by_label(tracksters["vertices_z"].array()[eid], labels)
-    re = remap_arrays_by_label(tracksters["vertices_energy"].array()[eid], labels)
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    plot_tracksters(ax, rx, ry, rz, re)
-    plt.show()
-
-
 def plot_dendrogram(model, **kwargs):
     # Create linkage matrix and then plot the dendrogram
 

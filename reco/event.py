@@ -114,6 +114,28 @@ def get_trackster_map(t_vertices, t_multiplicity, f_min=0):
                 i2te[i].append((t_idx, f))
     return i2te
 
+def clusters_by_indices(cluster_data, indices, eid):
+    clusters_x = cluster_data["position_x"][eid]
+    clusters_y = cluster_data["position_y"][eid]
+    clusters_z = cluster_data["position_z"][eid]
+    clusters_e = cluster_data["energy"][eid]
+
+    t_x = ak.Array([clusters_x[indices] for indices in indices])
+    t_y = ak.Array([clusters_y[indices] for indices in indices])
+    t_z = ak.Array([clusters_z[indices] for indices in indices])
+    t_e = ak.Array([clusters_e[indices] for indices in indices])
+
+    return t_x, t_y, t_z, t_e
+
+
+def get_lc_data(cluster_data, trackster_data, _eid):
+    # this is not an entirely fair comparison:
+    # the LC level methods should use sim LCs not only the CLUE3D ones
+    # using sim data here is possible, but gets complicated
+    indices = trackster_data["vertices_indexes"][_eid]
+    t_x, t_y, t_z, _t_e = clusters_by_indices(cluster_data, indices, _eid)
+    return np.array([ak.flatten(t_x), ak.flatten(t_y), ak.flatten(t_z)]).T
+
 
 def remap_arrays_by_label(array, labels):
     h = max(labels) + 1
