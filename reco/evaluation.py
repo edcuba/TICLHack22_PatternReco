@@ -143,50 +143,48 @@ def evaluate_remapped(nhits, t_indexes, st_indexes, t_energy, st_energy, v_multi
     return evaluate(nhits, ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min)
 
 
-def run_evaluation(callable_fn, tracksters, simtracksters, associations, **kwargs):
-    t_indexes = tracksters["vertices_indexes"].array()
-    t_energy = tracksters["vertices_energy"].array()
-    tv_multi = tracksters["vertices_multiplicity"].array()
-
-    sv_i = simtracksters["stsSC_vertices_indexes"].array()
+def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_data, **kwargs):
 
     mP = []
     mR = []
     mF = []
 
-    for _eid in range(len(t_indexes)):
-        labels = callable_fn(tracksters, _eid, **kwargs)
+    for eid in range(len(trackster_data["vertices_indexes"])):
 
-        gt = get_ground_truth(
-            tracksters,
-            simtracksters,
-            associations,
-            _eid,
-        )
+        t_indexes = trackster_data["vertices_indexes"][eid]
+        t_multiplicity = trackster_data["vertices_multiplicity"][eid]
 
-        gt_i = gt["vertices_indexes"]
+        # simulation
+        st_indexes = simtrackster_data["stsSC_vertices_indexes"][eid]
+        st_multiplicity = simtrackster_data["stsSC_vertices_multiplicity"][eid]
+
+        clusters_e = cluster_data["energy"][eid]
+        nhits = cluster_data["cluster_number_of_hits"][eid]
+
+        t_energy = ak.Array([clusters_e[indices] for indices in t_indexes])
+        st_energy = ak.Array([clusters_e[indices] for indices in st_indexes])
+
+        labels = callable_fn(trackster_data, eid, **kwargs)
 
         P, R, F = evaluate_remapped(
-            t_indexes[_eid],
-            gt_i,
-            t_energy[_eid],
-            gt["vertices_energy"],
-            tv_multi[_eid],
-            gt["vertices_multiplicity"],
+            nhits,
+            t_indexes,
+            st_indexes,
+            t_energy,
+            st_energy,
+            t_multiplicity,
+            st_multiplicity,
             labels,
-            noise=False
         )
         mP.append(P)
         mR.append(R)
         mF.append(F)
-        NIn = len(t_indexes[_eid])
-        NSim = len(sv_i[_eid])
-        NGt = len(gt_i)
+        NIn = len(t_indexes)
+        NSim = len(st_indexes)
         NReco = max(labels) + 1
-        print(f"E{_eid}: nTIn: {NIn}\tnTSim: {NSim}\tnTGt: {NGt}\tnTReco: {NReco}\tP: {P:.2f} R: {R:.2f} F:{F:.2f}")
+        print(f"E{eid}: nTIn: {NIn}\tnTSim: {NSim}\tnTReco: {NReco}\tP: {P:.2f} R: {R:.2f} F:{F:.2f}")
 
     print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")
-
 
 
 def get_merge_map(pair_index, preds, threshold):
