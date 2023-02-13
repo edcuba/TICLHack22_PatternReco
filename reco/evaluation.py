@@ -284,14 +284,14 @@ def pairwise_model_evaluation(
         print(f"Event {eid}:")
         for key, values in results.items():
             vals = values[-1]
-            print(f"\t{key}:\tP: {vals[0]:.2f} R: {vals[1]:.2f} F: {vals[2]:.2f}")
+            print(f"\t{key}:\tP: {vals[0]:.3f} R: {vals[1]:.3f} F: {vals[2]:.3f}")
 
     print("-----")
     for key, values in results.items():
         avg_p = np.mean([x[0] for x in values])
         avg_r = np.mean([x[1] for x in values])
         avg_f = np.mean([x[2] for x in values])
-        print(f"mean {key}:\tP: {avg_p:.2f} R: {avg_r:.2f} F: {avg_f:.2f}")
+        print(f"mean {key}:\tP: {avg_p:.3f} R: {avg_r:.3f} F: {avg_f:.3f}")
 
     return results
 
