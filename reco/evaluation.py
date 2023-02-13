@@ -109,7 +109,7 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map):
     return P / len(vertices)
 
 
-def evaluate(nhits, all_t_indexes, all_st_indexes, t_energy, st_energy, all_v_multi, all_sv_multi, f_min=0, beta=2, min_hits=1):
+def evaluate(nhits, all_t_indexes, all_st_indexes, t_energy, st_energy, all_v_multi, all_sv_multi, f_min=0, beta=0.2, min_hits=1):
 
     # prepare RECO indexes
     lc_over_1_hit = ak.Array([nhits[t] > min_hits for t in all_t_indexes])
@@ -144,13 +144,12 @@ def evaluate_remapped(nhits, t_indexes, st_indexes, t_energy, st_energy, v_multi
     return evaluate(nhits, ri, st_indexes, re, st_energy, rm, sv_multi, f_min=f_min)
 
 
-def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_data, **kwargs):
+def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_data, max_events=None, **kwargs):
+    results = []
+    n_events = len(trackster_data["vertices_indexes"])
+    max_events = min(n_events, max_events) if max_events else n_events
 
-    mP = []
-    mR = []
-    mF = []
-
-    for eid in range(len(trackster_data["vertices_indexes"])):
+    for eid in range(max_events):
 
         t_indexes = trackster_data["vertices_indexes"][eid]
         t_multiplicity = trackster_data["vertices_multiplicity"][eid]
@@ -167,25 +166,21 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
 
         labels = callable_fn(trackster_data, eid, **kwargs)
 
-        P, R, F = evaluate_remapped(
-            nhits,
-            t_indexes,
-            st_indexes,
-            t_energy,
-            st_energy,
-            t_multiplicity,
-            st_multiplicity,
-            labels,
-        )
-        mP.append(P)
-        mR.append(R)
-        mF.append(F)
-        NIn = len(t_indexes)
-        NSim = len(st_indexes)
-        NReco = max(labels) + 1
-        print(f"E{eid}: nTIn: {NIn}\tnTSim: {NSim}\tnTReco: {NReco}\tP: {P:.2f} R: {R:.2f} F:{F:.2f}")
-
-    print(f"--- Mean results: p: {np.mean(mP):.2f} r: {np.mean(mR):.2f} f:{np.mean(mF):.2f} ---")
+        results.append((
+            *evaluate_remapped(
+                nhits,
+                t_indexes,
+                st_indexes,
+                t_energy,
+                st_energy,
+                t_multiplicity,
+                st_multiplicity,
+                labels,
+            ),
+            max(labels) + 1,
+        ))
+        results
+    return results
 
 
 def get_merge_map(pair_index, preds, threshold):
