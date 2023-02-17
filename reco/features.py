@@ -2,11 +2,11 @@ import numpy as np
 import networkx as nx
 
 
-def longest_path_from_highest_centrality(G):
+def longest_path_from_highest_energy(G):
     """
-    Compute the longest path in graph from the point of highest (closeness) centrality
+    Compute the longest path in graph from the point of highest energy
     """
-    H = list(sorted(nx.closeness_centrality(G).items(), key=lambda x: x[1]))[-1][0]
+    H = sorted(G.nodes(data="energy"), key=lambda x: x[1])[-1][0]
     return max(nx.shortest_path_length(G, source=H).values())
 
 
@@ -57,7 +57,7 @@ def get_graph_level_features(G):
         mean_edge_energy_gap(G),
         mean_degree_centrality(G),
         mean_clustering_coefficient(G),
-        longest_path_from_highest_centrality(G),
+        longest_path_from_highest_energy(G),
     ]
 
 def get_min_max_z_points(vx, vy, vz):

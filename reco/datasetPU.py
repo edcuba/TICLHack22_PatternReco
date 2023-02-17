@@ -164,8 +164,13 @@ def get_event_pairs(
 
         for recoTxId, distance in in_cone:
 
-            if recoTxId in bigTs:
-                continue    # do not connect large tracksters
+            if recoTxId == bigT:
+                # do not connect to itself
+                continue
+
+            # do not connect large tracksters
+            # if recoTxId in bigTs:
+            #     continue
 
             features = build_pair_tensor((bigT, recoTxId), trackster_features)
 

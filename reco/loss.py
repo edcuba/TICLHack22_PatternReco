@@ -3,6 +3,17 @@ from torch import nn
 import torch.nn.functional as F
 
 
+class QualityFocalLoss(nn.Module):
+    def __init__(self, gamma=2):
+        super(QualityFocalLoss, self).__init__()
+        self.gamma = gamma
+
+    def forward(self, predictions, targets):
+        bce_loss = F.binary_cross_entropy(predictions, targets, reduction='none')
+        modulator = torch.abs(targets - predictions) ** self.gamma
+        return (modulator * bce_loss).mean()
+
+
 class FocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2):
         super(FocalLoss, self).__init__()
@@ -13,10 +24,10 @@ class FocalLoss(nn.Module):
     def forward(self, predictions, targets):
         """
         Mean binary focal loss
-        
+
         predictions: a torch tensor containing the predictions, 0s and 1s.
         targets: a torch tensor containing the ground truth, 0s and 1s.
-        
+
         gamma: focal loss power parameter, a float scalar
             - how much importance is given to misclassified examples
             - 2 is a good start

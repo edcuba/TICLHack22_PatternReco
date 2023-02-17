@@ -79,27 +79,33 @@ def remap_tracksters(trackster_data, new_mapping, eid):
     """
 
     raw_e = trackster_data["raw_energy"][eid]
-    new_idx_map = {}
-    new_tracksters = []
+    new_idx_map = {i: i for i in range(len(raw_e))}
+    new_tracksters = [[i] for i in range(len(raw_e))]
 
-    for tr_id in range(len(raw_e)):
-        # only keep the tracksters that are not going to be merged
-        if tr_id in new_mapping.keys():
-            # small trackster, ignore
+    for a, b in new_mapping.items():
+        new_a_idx = new_idx_map[a]
+        new_b_idx = new_idx_map[b]
+
+        if a == b or new_a_idx == new_b_idx:
+            # sanity check: same trackster or already merged
+            #   otherwise we delete the trackster
             continue
 
-        # create the new entry
-        new_tracksters.append([tr_id])
-        new_idx_map[tr_id] = len(new_tracksters) - 1
+        # merge tracksters
+        new_tracksters[new_b_idx] += new_tracksters[new_a_idx]
 
-    # now fill in the tracksters to be merged
-    for little, big in new_mapping.items():
-        new_big_idx = new_idx_map[big]
-        new_tracksters[new_big_idx].append(little)
+        # forward dictionary keys
+        for k, v in new_idx_map.items():
+            if v == new_a_idx:
+                new_idx_map[k] = new_b_idx
 
+        # remove the old record
+        new_tracksters[new_a_idx] = []
+
+    merged_tracksters = list(t for t in new_tracksters if t)
     datalist = list(trackster_data[k][eid] for k in ARRAYS)
     result = {
-        k: ak.Array([ak.flatten(datalist[i][tlist]) for tlist in new_tracksters])
+        k: ak.Array([ak.flatten(datalist[i][list(set(tlist))]) for tlist in merged_tracksters])
         for i, k in enumerate(ARRAYS)
     }
 

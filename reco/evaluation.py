@@ -36,11 +36,8 @@ def B(it, jt):
             if it_x == jt_x:
                 fr_inter += it_f + jt_f
 
-    # compute the union
-    fr_union = sum(it_f for _, it_f in it) + sum(jt_f for _, jt_f in jt)
-
-    # compute the intersection over union
-    return fr_inter / fr_union
+    # compute the intersection over union (sum of fractions must be 2)
+    return fr_inter / 2
 
 
 def get_pairwise_scores(i, V, i2t, te_map):
