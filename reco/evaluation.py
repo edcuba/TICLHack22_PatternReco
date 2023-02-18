@@ -180,24 +180,6 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
     return results
 
 
-def get_merge_map(pair_index, preds, threshold):
-    """
-        Performs the little-big mapping
-        Respects the highest prediction score for each little
-    """
-    merge_map = {}
-    score_map = {}
-
-    # should always be (little, big)
-    for (little, big), p in zip(pair_index, preds):
-        if p > threshold:
-            if not little in score_map or score_map[little] < p:
-                merge_map[little] = big
-                score_map[little] = p
-
-    return merge_map
-
-
 def pairwise_model_evaluation(
     cluster_data,
     trackster_data,
@@ -209,6 +191,7 @@ def pairwise_model_evaluation(
     max_events=100,
     reco_to_target=False,
     bigT_e_th=50,
+    pileup=False,
 ):
     """
     Evaluation must be unbalanced
@@ -234,7 +217,7 @@ def pairwise_model_evaluation(
             assoc_data,
             eid,
             radius,
-            pileup=False,
+            pileup=pileup,
             bigT_e_th=bigT_e_th,
         )
 
@@ -246,32 +229,39 @@ def pairwise_model_evaluation(
         preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
         truth = np.array(dY)
 
-        reco_merge_map = get_merge_map(pair_index, preds, decision_th)
-        sim_merge_map =  get_merge_map(pair_index, truth, decision_th)
-
-        # rebuild the event
-        reco = remap_tracksters(trackster_data, reco_merge_map, eid)
-        target = remap_tracksters(trackster_data, sim_merge_map, eid)
-
-        # reco
-        re = reco["vertices_energy"]
-        ri = reco["vertices_indexes"]
-        rm = reco["vertices_multiplicity"]
-
-        # target
-        target_e = target["vertices_energy"]
-        target_i = target["vertices_indexes"]
-        target_m = target["vertices_multiplicity"]
+        clusters_e = cluster_data["energy"][eid]
 
         # clue3D
-        ce = trackster_data["vertices_energy"][eid]
         ci = trackster_data["vertices_indexes"][eid]
         cm = trackster_data["vertices_multiplicity"][eid]
+        ce = ak.Array([clusters_e[indices] for indices in ci])
+
+        if pileup:
+            # need to filter out all the unrelated stuff
+            # keep only the big tracksters (right side)
+            p_list = list(set(b for _, b in pair_index))
+            ce = ce[p_list]
+            ci = ci[p_list]
+            cm = cm[p_list]
+
+        # rebuild the event
+        reco = remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=decision_th, pileup=pileup)
+        target = remap_tracksters(trackster_data, pair_index, truth, eid, decision_th=decision_th, pileup=pileup)
+
+        # reco
+        ri = reco["vertices_indexes"]
+        rm = reco["vertices_multiplicity"]
+        re = ak.Array([clusters_e[indices] for indices in ri])
+
+        # target
+        target_i = target["vertices_indexes"]
+        target_m = target["vertices_multiplicity"]
+        target_e = ak.Array([clusters_e[indices] for indices in target_i])
 
         # simulation
-        se = simtrackster_data["stsSC_vertices_energy"][eid]
         si = simtrackster_data["stsSC_vertices_indexes"][eid]
         sm = simtrackster_data["stsSC_vertices_multiplicity"][eid]
+        se = ak.Array([clusters_e[indices] for indices in si])
 
         nhits = cluster_data["cluster_number_of_hits"][eid]
 

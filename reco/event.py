@@ -73,34 +73,62 @@ def remap_items_by_label(array, labels):
     return ak.Array(rm)
 
 
-def remap_tracksters(trackster_data, new_mapping, eid):
+def get_merge_map(pair_index, preds, threshold):
+    """
+        Performs the little-big mapping
+        Respects the highest prediction score for each little
+    """
+    merge_map = {}
+    score_map = {}
+
+    # should always be (little, big)
+    for (little, big), p in zip(pair_index, preds):
+        if p > threshold:
+            if not little in score_map or score_map[little] < p:
+                merge_map[little] = big
+                score_map[little] = p
+
+    return merge_map
+
+
+def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pileup=False):
     """
         provide a mapping in format (source: target)
     """
+    new_mapping = get_merge_map(pair_index, preds, decision_th)
 
-    raw_e = trackster_data["raw_energy"][eid]
-    new_idx_map = {i: i for i in range(len(raw_e))}
-    new_tracksters = [[i] for i in range(len(raw_e))]
+    if pileup:
+        # only include right-handed tracksters
+        p_list = set(b for _, b in pair_index)
+        new_tracksters = [[b] for b in p_list]
+    else:
+        # include all tracksters
+        new_tracksters = [[i] for i in range(len(trackster_data["raw_energy"][eid]))]
 
-    for a, b in new_mapping.items():
-        new_a_idx = new_idx_map[a]
+    new_idx_map = {o[0]: i for i, o in enumerate(new_tracksters)}
+
+    for l, b in new_mapping.items():
         new_b_idx = new_idx_map[b]
+        new_l_idx = new_idx_map.get(l, -1)
 
-        if a == b or new_a_idx == new_b_idx:
+        if l == b or new_l_idx == new_b_idx:
             # sanity check: same trackster or already merged
             #   otherwise we delete the trackster
             continue
 
-        # merge tracksters
-        new_tracksters[new_b_idx] += new_tracksters[new_a_idx]
-
-        # forward dictionary keys
-        for k, v in new_idx_map.items():
-            if v == new_a_idx:
-                new_idx_map[k] = new_b_idx
-
-        # remove the old record
-        new_tracksters[new_a_idx] = []
+        if new_l_idx == -1:
+            # assign to a trackster
+            new_tracksters[new_b_idx].append(l)
+            new_idx_map[l] = new_b_idx
+        else:
+            # merge tracksters
+            new_tracksters[new_b_idx] += new_tracksters[new_l_idx]
+            # forward dictionary references
+            for k, v in new_idx_map.items():
+                if v == new_l_idx:
+                    new_idx_map[k] = new_b_idx
+            # remove the old record
+            new_tracksters[new_l_idx] = []
 
     merged_tracksters = list(t for t in new_tracksters if t)
     datalist = list(trackster_data[k][eid] for k in ARRAYS)
