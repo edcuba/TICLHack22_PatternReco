@@ -58,7 +58,7 @@ def get_pairwise_scores(i, V, i2t, te_map):
     # for all vertices of the trackster
     for j in V:
         # get the pair energy
-        e_pair = (te_map[i] * te_map[j])**2
+        e_pair = (te_map[i] * te_map[j])
         e_pairs += e_pair
 
         # get (sim-)tracksters of i and j on the other side
@@ -100,13 +100,15 @@ def bcubed(vertices, t_vertices, i2a, i2b, e_map):
             te_map = e_map[int(i_trackster)]
 
             # normalize by the number of tracksters and add to the outer P sum
-            P += get_pairwise_scores(i, V, i2b, te_map) / len(i_tracksters)
+            P += te_map[i] * get_pairwise_scores(i, V, i2b, te_map) / len(i_tracksters)
+
+    total_e = sum(sum(te.values()) for te in e_map.values())
 
     # normalize the result
-    return P / len(vertices)
+    return P / total_e
 
 
-def evaluate(nhits, all_t_indexes, all_st_indexes, t_energy, st_energy, all_v_multi, all_sv_multi, f_min=0, beta=0.2, min_hits=1):
+def evaluate(nhits, all_t_indexes, all_st_indexes, t_energy, st_energy, all_v_multi, all_sv_multi, f_min=0, beta=0.5, min_hits=1):
 
     # prepare RECO indexes
     lc_over_1_hit = ak.Array([nhits[t] > min_hits for t in all_t_indexes])
