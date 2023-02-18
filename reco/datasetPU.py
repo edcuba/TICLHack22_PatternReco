@@ -49,17 +49,16 @@ def get_tracksters_in_cone(x1, x2, barycentres, radius=10):
 def get_major_PU_tracksters(
     reco2sim,
     sim_raw_energy,
-    score_threshold=0.2,
 ):
     # assuming only one simtrackster to keep things easy
     big = []
 
-    for recoT_idx, (sim_indexes, shared_energies, scores) in enumerate(reco2sim):
-        for simT_idx, shared_energy, score in zip(sim_indexes, shared_energies, scores):
+    for recoT_idx, (sim_indexes, shared_energies) in enumerate(reco2sim):
+        for simT_idx, shared_energy in zip(sim_indexes, shared_energies):
             # 2 goals here:
             # - find the trackster with >50% shared energy
             # - find the tracksters with < 0.2 score
-            if score > score_threshold: continue
+            # if score > score_threshold: continue
 
             st_energy = sim_raw_energy[simT_idx]
             st_fraction = shared_energy / st_energy
@@ -74,15 +73,16 @@ def get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=False, 
     if pileup:
         # get associations data
         reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
-        reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
         reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
         sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
+        # reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
 
         # select only tracksters for which simdata is available
-        return get_major_PU_tracksters(
-            zip(reco2sim_index, reco2sim_sharedE, reco2sim_score),
+        bigTs = get_major_PU_tracksters(
+            zip(reco2sim_index, reco2sim_sharedE),
             sim_raw_energy,
         )
+        return np.array(bigTs)[trackster_data["raw_energy"][eid][bigTs] > energy_th].tolist()
 
     # select tracksters above 50GeV
     return np.nonzero(trackster_data["raw_energy"][eid] > energy_th)[0].tolist()
