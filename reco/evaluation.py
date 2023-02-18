@@ -225,6 +225,7 @@ def pairwise_model_evaluation(
         results["reco_to_target"] = []
 
     for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
+        print(f"Event {eid}:")
 
         dX, dY, pair_index = get_event_pairs(
             cluster_data,
@@ -236,6 +237,10 @@ def pairwise_model_evaluation(
             pileup=False,
             bigT_e_th=bigT_e_th,
         )
+
+        if len(dX) == 0:
+            print("\tNo data")
+            continue
 
         # predict edges
         preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
@@ -278,7 +283,6 @@ def pairwise_model_evaluation(
 
         results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
 
-        print(f"Event {eid}:")
         for key, values in results.items():
             vals = values[-1]
             print(f"\t{key}:\tP: {vals[0]:.3f} R: {vals[1]:.3f} F: {vals[2]:.3f}")
