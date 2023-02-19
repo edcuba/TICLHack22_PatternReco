@@ -194,6 +194,7 @@ def pairwise_model_evaluation(
     reco_to_target=False,
     bigT_e_th=50,
     pileup=False,
+    collection="SC",
 ):
     """
     Evaluation must be unbalanced
@@ -221,6 +222,7 @@ def pairwise_model_evaluation(
             radius,
             pileup=pileup,
             bigT_e_th=bigT_e_th,
+            collection=collection
         )
 
         if len(dX) == 0:
@@ -261,8 +263,8 @@ def pairwise_model_evaluation(
         target_e = ak.Array([clusters_e[indices] for indices in target_i])
 
         # simulation
-        si = simtrackster_data["stsSC_vertices_indexes"][eid]
-        sm = simtrackster_data["stsSC_vertices_multiplicity"][eid]
+        si = simtrackster_data[f"sts{collection}_vertices_indexes"][eid]
+        sm = simtrackster_data[f"sts{collection}_vertices_multiplicity"][eid]
         se = ak.Array([clusters_e[indices] for indices in si])
 
         nhits = cluster_data["cluster_number_of_hits"][eid]
