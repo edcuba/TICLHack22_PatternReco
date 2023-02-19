@@ -48,7 +48,8 @@ def get_tracksters_in_cone(x1, x2, barycentres, radius=10):
 
 def get_major_PU_tracksters(
     reco2sim,
-    sim_raw_energy,
+    raw_energy,
+    sim_bary_z,
 ):
     # assuming only one simtrackster to keep things easy
     big = []
@@ -60,29 +61,30 @@ def get_major_PU_tracksters(
             # - find the tracksters with < 0.2 score
             # if score > score_threshold: continue
 
-            st_energy = sim_raw_energy[simT_idx]
-            st_fraction = shared_energy / st_energy
+            t_energy = raw_energy[recoT_idx]
+            se_fraction = shared_energy / t_energy
 
-            if st_fraction > 0.5:
+            if se_fraction > 0.5 and sim_bary_z[simT_idx] > 0:
                 big.append(recoT_idx)
 
     return big
 
 
-def get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=False, energy_th=50):
+def get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=False, energy_th=50, collection="SC"):
     if pileup:
         # get associations data
-        reco2sim_index = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
-        reco2sim_sharedE = assoc_data["tsCLUE3D_recoToSim_SC_sharedE"][eid]
-        sim_raw_energy = simtrackster_data["stsSC_raw_energy"][eid]
-        # reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
+        reco2sim_index = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
+        reco2sim_sharedE = assoc_data[f"tsCLUE3D_recoToSim_{collection}_sharedE"][eid]
+        raw_energy = trackster_data["raw_energy"][eid]
+        sim_bary_z = simtrackster_data[f"sts{collection}_barycenter_z"]
 
         # select only tracksters for which simdata is available
         bigTs = get_major_PU_tracksters(
             zip(reco2sim_index, reco2sim_sharedE),
-            sim_raw_energy,
+            raw_energy,
+            sim_bary_z,
         )
-        return np.array(bigTs)[trackster_data["raw_energy"][eid][bigTs] > energy_th].tolist()
+        return np.array(bigTs)[raw_energy[bigTs] > energy_th].tolist()
 
     # select tracksters above 50GeV
     return np.nonzero(trackster_data["raw_energy"][eid] > energy_th)[0].tolist()
@@ -116,6 +118,7 @@ def get_event_pairs(
         radius,
         pileup=False,
         bigT_e_th=50,
+        collection="SC",
     ):
 
     dataset_X = []
@@ -133,13 +136,21 @@ def get_event_pairs(
     vertices_y = ak.Array([clusters_y[indices] for indices in vertices_indices])
     vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
 
-    reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
-    reco2sim_idx = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
+    reco2sim_score = assoc_data[f"tsCLUE3D_recoToSim_{collection}_score"][eid]
+    reco2sim_idx = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
 
     # add id probabilities
     id_probs = trackster_data["id_probabilities"][eid].tolist()
 
-    bigTs = get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=pileup, energy_th=bigT_e_th)
+    bigTs = get_bigTs(
+        trackster_data,
+        simtrackster_data,
+        assoc_data,
+        eid,
+        pileup=pileup,
+        energy_th=bigT_e_th,
+        collection=collection
+    )
 
     trackster_features = list([
         trackster_data[k][eid] for k in FEATURE_KEYS

@@ -47,7 +47,7 @@ def clusters_by_indices(cluster_data, indices, eid):
     return t_x, t_y, t_z, t_e
 
 
-def get_data_arrays(clusters, tracksters, simtracksters, associations):
+def get_data_arrays(clusters, tracksters, simtracksters, associations, collection="SC"):
     trackster_data = tracksters.arrays(ARRAYS + FEATURE_KEYS + ['id_probabilities'])
     cluster_data = clusters.arrays([
         "position_x",
@@ -57,15 +57,16 @@ def get_data_arrays(clusters, tracksters, simtracksters, associations):
         "cluster_number_of_hits",
     ])
     simtrackster_data = simtracksters.arrays([
-        "stsSC_raw_energy",
-        "stsSC_vertices_indexes",
-        "stsSC_vertices_energy",
-        "stsSC_vertices_multiplicity"
+        f"sts{collection}_raw_energy",
+        f"sts{collection}_vertices_indexes",
+        f"sts{collection}_vertices_energy",
+        f"sts{collection}_vertices_multiplicity",
+        f"sts{collection}_barycenter_z"
     ])
     assoc_data = associations.arrays([
-        "tsCLUE3D_recoToSim_SC",
-        "tsCLUE3D_recoToSim_SC_sharedE",
-        "tsCLUE3D_recoToSim_SC_score",
+        f"tsCLUE3D_recoToSim_{collection}",
+        f"tsCLUE3D_recoToSim_{collection}_sharedE",
+        f"tsCLUE3D_recoToSim_{collection}_score",
     ])
     return cluster_data, trackster_data, simtrackster_data, assoc_data
 
@@ -78,12 +79,12 @@ def get_bary_data(trackster_data, _eid):
     ]).T
 
 
-def get_event_data(source):
+def get_event_data(source, collection="SC"):
     tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
-    simtracksters = uproot.open({source: "ticlNtuplizer/simtrackstersSC"})
+    simtracksters = uproot.open({source: f"ticlNtuplizer/simtracksters{collection}"})
     associations = uproot.open({source: "ticlNtuplizer/associations"})
     clusters = uproot.open({source: "ticlNtuplizer/clusters"})
-    return get_data_arrays(clusters, tracksters, simtracksters, associations)
+    return get_data_arrays(clusters, tracksters, simtracksters, associations, collection=collection)
 
 
 def get_lc_data(cluster_data, trackster_data, _eid):
