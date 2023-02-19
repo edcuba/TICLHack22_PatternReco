@@ -222,7 +222,9 @@ def get_event_graph(
         assoc_data,
         eid,
         radius=10,
-        pileup=False
+        bigT_e_th=10,
+        pileup=False,
+        collection="SC",
     ):
     data_list = []
 
@@ -243,10 +245,18 @@ def get_event_graph(
     vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
 
     # get associations data
-    reco2sim_score = assoc_data["tsCLUE3D_recoToSim_SC_score"][eid]
-    reco2sim_idx = assoc_data["tsCLUE3D_recoToSim_SC"][eid]
+    reco2sim_score = assoc_data[f"tsCLUE3D_recoToSim_{collection}_score"][eid]
+    reco2sim_idx = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
 
-    bigTs = get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=pileup)
+    bigTs = get_bigTs(
+        trackster_data,
+        simtrackster_data,
+        assoc_data,
+        eid,
+        pileup=pileup,
+        energy_th=bigT_e_th,
+        collection=collection,
+    )
 
     trackster_features = list([
         trackster_data[k][eid] for k in FEATURE_KEYS
@@ -435,6 +445,8 @@ class TracksterGraph(InMemoryDataset):
             radius=10,
             pileup=False,
             score_threshold=0.2,
+            bigT_e_th=10,
+            collection="SP",
         ):
         self.name = name
         self.pileup = pileup
@@ -442,6 +454,8 @@ class TracksterGraph(InMemoryDataset):
         self.raw_data_path = raw_data_path
         self.root_dir = root_dir
         self.RADIUS = radius
+        self.bigT_e_th = bigT_e_th
+        self.collection = collection
         self.SCORE_THRESHOLD = score_threshold
         super(TracksterGraph, self).__init__(root_dir, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -463,7 +477,8 @@ class TracksterGraph(InMemoryDataset):
             self.name,
             f"f{self.N_FILES or len(self.raw_file_names)}",
             f"r{self.RADIUS}",
-            f"s{self.SCORE_THRESHOLD}"
+            f"s{self.SCORE_THRESHOLD}",
+            f"eth{self.bigT_e_th}"
         ]
         return list([f"TracksterGraph{'PU' if self.pileup else ''}_{'_'.join(infos)}.pt"])
 
@@ -475,7 +490,10 @@ class TracksterGraph(InMemoryDataset):
         data_list = []
         for source in self.raw_file_names:
             print(source, file=sys.stderr)
-            cluster_data, trackster_data, simtrackster_data, assoc_data = get_event_data(source)
+            cluster_data, trackster_data, simtrackster_data, assoc_data = get_event_data(
+                source,
+                collection=self.collection
+            )
             for eid in range(len(trackster_data["barycenter_x"])):
                 data_list += get_event_graph(
                     cluster_data,
@@ -484,7 +502,9 @@ class TracksterGraph(InMemoryDataset):
                     assoc_data,
                     eid,
                     self.RADIUS,
-                    pileup=self.pileup
+                    pileup=self.pileup,
+                    bigT_e_th=self.bigT_e_th,
+                    collection=self.collection
                 )
 
         data, slices = self.collate(data_list)
@@ -495,6 +515,6 @@ class TracksterGraph(InMemoryDataset):
             f"graphs={len(self)}",
             f"nodes={len(self.data.x)}",
             f"radius={self.RADIUS}",
-            f"score_threshold={self.SCORE_THRESHOLD}",
+            f"bigT_e_th={self.bigT_e_th}",
         ]
         return f"TracksterGraph{'PU' if self.pileup else ''}({', '.join(infos)})"
