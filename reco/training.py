@@ -119,8 +119,8 @@ def roc_auc(model, device, test_dl, truth_threshold=0.7):
         if isinstance(data, Data):
             b = data.x
             l = data.y
-            ei = data.edge_index.to(device)
-            mask = data.mask
+            ei = data.edge_index
+            # mask = data.mask
         else:
             b, l = data
 
@@ -130,7 +130,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.7):
         if ei is None:
             model_pred = model(b)
         else:
-            model_pred = model(b, ei)
+            model_pred = model(b, ei.to(device))
 
         model_pred = model_pred.detach().cpu().reshape(-1)
         if mask is not None:
@@ -173,8 +173,8 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7
             if isinstance(data, Data):
                 b = data.x
                 l = data.y
-                ei = data.edge_index.to(device)
-                mask = data.mask
+                ei = data.edge_index
+                # mask = data.mask
             else:
                 b, l = data
 
@@ -184,7 +184,7 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7
             if ei is None:
                 model_pred = model(b)
             else:
-                model_pred = model(b, ei)
+                model_pred = model(b, ei.to(device))
 
             model_pred = model_pred.detach().cpu().reshape(-1)
 

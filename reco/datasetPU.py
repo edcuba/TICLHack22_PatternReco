@@ -321,8 +321,8 @@ def get_event_graph(
             node_features.append(features)
             node_labels.append(label)
             node_index.append(recoTxId)
-            node_pos.append(bary[recoTxId])
-            node_eng.append(raw_energy)
+            node_pos.append(bary[recoTxId].tolist())
+            node_eng.append(raw_energy[recoTxId])
             node_shared_e.append(shared_e)
 
         data_list.append(Data(
@@ -333,7 +333,6 @@ def get_event_graph(
             y=torch.tensor(node_labels, dtype=torch.float),
             node_index=torch.tensor(node_index, dtype=torch.int)
         ))
-
     return data_list
 
 

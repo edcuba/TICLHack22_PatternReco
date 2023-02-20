@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch_geometric.utils import scatter
 
 
 class QualityFocalLoss(nn.Module):
@@ -41,3 +42,24 @@ class FocalLoss(nn.Module):
         # alpha if target = 1 and 1 - alpha if target = 0
         f_loss = alpha_tensor * (1 - p_t) ** self.gamma * bce_loss
         return f_loss.mean()
+
+
+def batch_sum(x, batch):
+    size = int(batch.max().item() + 1)
+    return scatter(x, batch, dim=0, dim_size=size, reduce='sum')
+
+
+class GraphClassificationLoss(nn.Module):
+    def __init__(self):
+        super(GraphClassificationLoss, self).__init__()
+
+    def forward(self, data, preds):
+        foreground_shared_e = 1 + batch_sum(data.e, data.batch)
+        background_shared_e = 1 + batch_sum(data.e - data.shared_e, data.batch)
+
+        foreground = batch_sum(data.shared_e * (preds - data.y)**2, data.batch)
+        background = batch_sum((data.e - data.shared_e) * ((1 - preds) - (1 - data.y))**2, data.batch)
+
+        batches = foreground / foreground_shared_e + background / background_shared_e
+
+        return batches.sum()
