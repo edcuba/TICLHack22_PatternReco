@@ -13,7 +13,7 @@ from .dataset import get_ground_truth
 from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
 from .features import get_graph_level_features
 
-from .datasetPU import get_event_pairs
+from .datasetPU import get_event_pairs, get_event_graph
 
 
 def f_score(precision, recall, beta=1):
@@ -182,7 +182,7 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
     return results
 
 
-def pairwise_model_evaluation(
+def model_evaluation(
     cluster_data,
     trackster_data,
     simtrackster_data,
@@ -195,6 +195,7 @@ def pairwise_model_evaluation(
     bigT_e_th=50,
     pileup=False,
     collection="SC",
+    graph=False,
 ):
     """
     Evaluation must be unbalanced
@@ -213,25 +214,48 @@ def pairwise_model_evaluation(
     for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
         print(f"Event {eid}:")
 
-        dX, dY, pair_index = get_event_pairs(
-            cluster_data,
-            trackster_data,
-            simtrackster_data,
-            assoc_data,
-            eid,
-            radius,
-            pileup=pileup,
-            bigT_e_th=bigT_e_th,
-            collection=collection
-        )
+        if graph:
+            dX = get_event_graph(
+                cluster_data,
+                trackster_data,
+                simtrackster_data,
+                assoc_data,
+                eid,
+                radius,
+                pileup=pileup,
+                bigT_e_th=bigT_e_th,
+                collection=collection
+            )
+        else:
+            dX, dY, pair_index = get_event_pairs(
+                cluster_data,
+                trackster_data,
+                simtrackster_data,
+                assoc_data,
+                eid,
+                radius,
+                pileup=pileup,
+                bigT_e_th=bigT_e_th,
+                collection=collection
+            )
 
         if len(dX) == 0:
             print("\tNo data")
             continue
 
         # predict edges
-        preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
-        truth = np.array(dY)
+        if graph:
+            preds = []
+            truth = []
+            pair_index = []
+            for sample in dX:
+                bigT = torch.argmax(sample.x[:, 0]).item()
+                preds += model(sample.x).detach().cpu().reshape(-1).tolist()
+                truth += sample.y.detach().cpu().reshape(-1).tolist()
+                pair_index += [(idx, bigT) for idx in sample.node_index.detach().cpu().reshape(-1).tolist()]
+        else:
+            preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
+            truth = np.array(dY)
 
         clusters_e = cluster_data["energy"][eid]
 
