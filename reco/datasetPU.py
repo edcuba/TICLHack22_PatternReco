@@ -10,7 +10,7 @@ from torch_geometric.data import Data, InMemoryDataset
 
 from .features import get_graph_level_features, get_min_max_z_points
 from .graphs import create_graph
-from .data import get_event_data, FEATURE_KEYS
+from .data import get_event_data, FEATURE_KEYS, get_bary_data
 
 
 def build_pair_tensor(edge, features):
@@ -244,9 +244,13 @@ def get_event_graph(
     vertices_z = ak.Array([clusters_z[indices] for indices in vertices_indices])
     vertices_e = ak.Array([clusters_e[indices] for indices in vertices_indices])
 
+    bary = get_bary_data(trackster_data, eid)
+    raw_energy = trackster_data["raw_energy"][eid]
+
     # get associations data
     reco2sim_score = assoc_data[f"tsCLUE3D_recoToSim_{collection}_score"][eid]
     reco2sim_idx = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
+    reco2sim_shared_e = assoc_data[f"tsCLUE3D_recoToSim_{collection}_sharedE"][eid]
 
     bigTs = get_bigTs(
         trackster_data,
@@ -267,13 +271,17 @@ def get_event_graph(
         node_features = []
         node_labels = []
         node_index = []
+        node_pos = []
+        node_eng = []
+        node_shared_e = []
 
         # find index of the best score
         bigT_best_score_idx = np.argmin(reco2sim_score[bigT])
-        # get the best score
-        bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
         # figure out which simtrackster it is
         bigT_simT_idx = reco2sim_idx[bigT][bigT_best_score_idx]
+
+        # get the best score
+        # bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
 
         in_cone = get_neighborhood(trackster_data, vertices_z, eid, radius, bigT)
         for recoTxId, distance in in_cone:
@@ -297,23 +305,31 @@ def get_event_graph(
                 len(vertices_z[recoTxId]),
             ]
 
+            features += [f[recoTxId] for f in trackster_features]
             features += minP
             features += maxP
             features += id_probs[recoTxId]
-            features += [f[recoTxId] for f in trackster_features]
             features += get_graph_level_features(recoTx_graph)
 
             # find out the index of the simpartice we are looking for
             recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
+
             # get the score for the given simparticle and compute the score
-            label = (1 - bigT_best_score) * (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
+            label = (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
+            shared_e = reco2sim_shared_e[recoTxId][recoTx_bigT_simT_idx]
 
             node_features.append(features)
             node_labels.append(label)
             node_index.append(recoTxId)
+            node_pos.append(bary[recoTxId])
+            node_eng.append(raw_energy)
+            node_shared_e.append(shared_e)
 
         data_list.append(Data(
             x=torch.tensor(node_features, dtype=torch.float),
+            e=torch.tensor(node_eng, dtype=torch.float),
+            shared_e=torch.tensor(node_shared_e, dtype=torch.float),
+            pos=torch.tensor(node_pos, dtype=torch.float),
             y=torch.tensor(node_labels, dtype=torch.float),
             node_index=torch.tensor(node_index, dtype=torch.int)
         ))
@@ -446,7 +462,7 @@ class TracksterGraph(InMemoryDataset):
             pileup=False,
             score_threshold=0.2,
             bigT_e_th=10,
-            collection="SP",
+            collection="SC",
         ):
         self.name = name
         self.pileup = pileup
