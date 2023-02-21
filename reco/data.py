@@ -81,7 +81,7 @@ def get_bary_data(trackster_data, _eid):
     ]).T
 
 
-def get_event_data(source, collection="SC", pileup=True):
+def get_event_data(source, collection="SC", pileup=False):
     tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
     simtracksters = uproot.open({source: f"ticlNtuplizer/simtracksters{collection}"})
     associations = uproot.open({source: "ticlNtuplizer/associations"})

@@ -10,7 +10,7 @@ from .graphs import create_graph
 from .energy import get_energy_map
 from .data import FEATURE_KEYS
 from .dataset import get_ground_truth
-from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs
+from .event import get_trackster_map, remap_arrays_by_label, remap_tracksters, get_candidate_pairs, merge_tracksters
 from .features import get_graph_level_features
 
 from .datasetPU import get_event_pairs, get_event_graph
@@ -181,6 +181,41 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
         results
     return results
 
+def eval_graph_fb(trackster_data, eid, dX, model, decision_th=0.5):
+    # this is the foreground-background case
+    # pick the sample with the highest energy
+    max_e_sample = None
+    max_e_sample_e = 0
+    for sample in dX:
+        bigT_idx = torch.argmax(sample.x[:, 0]).item()
+        bigT_e = sample.e[bigT_idx]
+        if bigT_e > max_e_sample_e:
+            max_e_sample = sample
+            max_e_sample_e = bigT_e
+
+    # process the sample
+    sample = max_e_sample
+    preds = model(sample.x).detach().cpu().reshape(-1)
+    truth = sample.y.detach().cpu().reshape(-1)
+    nodes = sample.node_index.detach().cpu().reshape(-1)
+
+    reco_tracksters = []
+    reco_fg = nodes[preds >= decision_th].tolist()
+    reco_bg = nodes[preds < decision_th].tolist()
+    if reco_fg: reco_tracksters.append(reco_fg)
+    if reco_bg: reco_tracksters.append(reco_bg)
+
+    target_tracksters = []
+    target_fg = nodes[truth >= decision_th].tolist()
+    target_bg = nodes[truth < decision_th].tolist()
+    if target_fg: target_tracksters.append(target_fg)
+    if target_bg: target_tracksters.append(target_bg)
+
+    reco = merge_tracksters(trackster_data, reco_tracksters, eid)
+    target = merge_tracksters(trackster_data, target_tracksters, eid)
+    p_list = nodes.tolist()
+    return reco, target, p_list
+
 
 def model_evaluation(
     cluster_data,
@@ -195,6 +230,7 @@ def model_evaluation(
     pileup=False,
     collection="SC",
     graph=False,
+    reco_eval=True,
 ):
     """
     Evaluation must be unbalanced
@@ -204,9 +240,10 @@ def model_evaluation(
     results = {
         "clue3d_to_sim": [],
         "target_to_sim": [],
-        "reco_to_sim": []
     }
 
+    if reco_eval:
+        results["reco_to_sim"] = []
 
     for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
         print(f"Event {eid}:")
@@ -242,19 +279,23 @@ def model_evaluation(
 
         # predict edges
         if graph:
-            preds = []
-            truth = []
-            pair_index = []
-            for sample in dX:
-                bigT = torch.argmax(sample.x[:, 0]).item()
-                preds += model(sample.x).detach().cpu().reshape(-1).tolist()
-                truth += sample.y.detach().cpu().reshape(-1).tolist()
-                pair_index += [(idx, bigT) for idx in sample.node_index.detach().cpu().reshape(-1).tolist()]
+            reco, target, p_list = eval_graph_fb(trackster_data, eid, dX, model, decision_th=decision_th)
         else:
             preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
             truth = np.array(dY)
 
+            # rebuild the event
+            reco = remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=decision_th, pileup=pileup)
+            target = remap_tracksters(trackster_data, pair_index, truth, eid, decision_th=decision_th, pileup=pileup)
+            p_list = list(set(b for _, b in pair_index))
+
+
         clusters_e = cluster_data["energy"][eid]
+
+        # target
+        target_i = target["vertices_indexes"]
+        target_m = target["vertices_multiplicity"]
+        target_e = ak.Array([clusters_e[indices] for indices in target_i])
 
         # clue3D
         ci = trackster_data["vertices_indexes"][eid]
@@ -264,24 +305,9 @@ def model_evaluation(
         if pileup:
             # need to filter out all the unrelated stuff
             # keep only the big tracksters (right side)
-            p_list = list(set(b for _, b in pair_index))
             ce = ce[p_list]
             ci = ci[p_list]
             cm = cm[p_list]
-
-        # rebuild the event
-        reco = remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=decision_th, pileup=pileup)
-        target = remap_tracksters(trackster_data, pair_index, truth, eid, decision_th=decision_th, pileup=pileup)
-
-        # reco
-        ri = reco["vertices_indexes"]
-        rm = reco["vertices_multiplicity"]
-        re = ak.Array([clusters_e[indices] for indices in ri])
-
-        # target
-        target_i = target["vertices_indexes"]
-        target_m = target["vertices_multiplicity"]
-        target_e = ak.Array([clusters_e[indices] for indices in target_i])
 
         # simulation
         p = "" if pileup else f"sts{collection}_"
@@ -293,13 +319,20 @@ def model_evaluation(
 
         results["clue3d_to_sim"].append(evaluate(nhits, ci, si, ce, se, cm, sm))
         results["target_to_sim"].append(evaluate(nhits, target_i, si, target_e, se, target_m, sm))
-        results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
+
+        if reco_eval:
+            # reco
+            ri = reco["vertices_indexes"]
+            rm = reco["vertices_multiplicity"]
+            re = ak.Array([clusters_e[indices] for indices in ri])
+            results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
 
         for key, values in results.items():
             vals = values[-1]
             print(f"\t{key}:\tP: {vals[0]:.3f} R: {vals[1]:.3f} F: {vals[2]:.3f}")
 
-        print(f"\t|S| = {len(si)} |T| = {len(target_i)} |R| = {len(ri)}")
+        if reco_eval:
+            print(f"\t|S| = {len(si)} |T| = {len(target_i)} |R| = {len(ri)}")
 
     print("-----")
     for key, values in results.items():
@@ -307,127 +340,5 @@ def model_evaluation(
         avg_r = np.mean([x[1] for x in values])
         avg_f = np.mean([x[2] for x in values])
         print(f"mean {key}:\tP: {avg_p:.3f} R: {avg_r:.3f} F: {avg_f:.3f}")
-
-    return results
-
-
-def graph_model_evaluation(
-    tracksters,
-    simtracksters,
-    associations,
-    graphs,
-    model,
-    decision_th,
-    max_distance=10,
-    energy_threshold=10,
-    max_events=100,
-    include_graph_features=False,
-):
-    nt = tracksters["NTracksters"].array()
-    model.eval()
-
-    results = {
-        "clue3d_to_sim": [],
-        "target_to_sim": [],
-        "reco_to_target": [],
-        "reco_to_sim": []
-    }
-
-    for eid in range(min([len(nt), max_events])):
-
-        # clue3D
-        cx = tracksters["vertices_x"].array()[eid]
-        cy = tracksters["vertices_y"].array()[eid]
-        cz = tracksters["vertices_z"].array()[eid]
-        ce = tracksters["vertices_energy"].array()[eid]
-        ci = tracksters["vertices_indexes"].array()[eid]
-        cm = tracksters["vertices_multiplicity"].array()[eid]
-
-        # get candidate pairs
-        candidate_pairs, _ = get_candidate_pairs(
-            tracksters,
-            graphs,
-            eid,
-            max_distance=max_distance,
-        )
-
-        # get target
-        gt = get_ground_truth(
-            tracksters,
-            simtracksters,
-            associations,
-            eid,
-            distance_threshold=max_distance,
-            energy_threshold=energy_threshold,
-        )
-
-        trackster_features = list([
-            tracksters[k].array()[eid] for k in FEATURE_KEYS
-        ])
-
-        tx_list = []
-        for tx in range(len(ce)):
-            tx_features = [f[tx] for f in trackster_features]
-            if include_graph_features:
-                g = create_graph(cx[tx], cy[tx], cz[tx], ce[tx], ci[tx], N=2)
-                tx_features += get_graph_level_features(g)
-            tx_features += [len(ce[tx])]
-            tx_list.append(tx_features)
-
-        data = Data(
-            x=torch.tensor(tx_list),
-            edge_index=torch.tensor(candidate_pairs).T,
-        )
-
-        transform = T.Compose([T.NormalizeFeatures()])
-        sample = transform(data)
-
-        # predict edges
-        preds = model(sample.x, sample.edge_index)
-        out = (preds.reshape(-1) > decision_th)
-
-        # map decisions
-        # !must be little -> big
-        # some tracksters happen to both on left and right here
-        re = tracksters["raw_energy"].array()[eid]
-        merge_map = {
-            a: b for (a, b), o in zip(candidate_pairs, out)
-            if o and re[a] < energy_threshold and re[b] > energy_threshold
-        }
-
-        # rebuild the event
-        reco = remap_tracksters(tracksters, merge_map, eid)
-
-        # reco
-        re = reco["vertices_energy"]
-        ri = reco["vertices_indexes"]
-        rm = reco["vertices_multiplicity"]
-
-        # target
-        te = gt["vertices_energy"]
-        ti = gt["vertices_indexes"]
-        tm = gt["vertices_multiplicity"]
-
-        # simulation
-        se = simtracksters["stsSC_vertices_energy"].array()[eid]
-        si = simtracksters["stsSC_vertices_indexes"].array()[eid]
-        sm = simtracksters["stsSC_vertices_multiplicity"].array()[eid]
-
-        results["clue3d_to_sim"].append(evaluate(ci, si, ce, se, cm, sm, noise=False))
-        results["target_to_sim"].append(evaluate(ti, si, te, se, tm, sm, noise=False))
-        results["reco_to_target"].append(evaluate(ri, ti, re, te, rm, tm, noise=False))
-        results["reco_to_sim"].append(evaluate(ri, si, re, se, rm, sm, noise=False))
-
-        print(f"Event {eid}:")
-        for key, values in results.items():
-            vals = values[-1]
-            print(f"\t{key}:\tP: {vals[0]:.2f} R: {vals[1]:.2f} F: {vals[2]:.2f}")
-
-    print("-----")
-    for key, values in results.items():
-        avg_p = np.mean([x[0] for x in values])
-        avg_r = np.mean([x[1] for x in values])
-        avg_f = np.mean([x[2] for x in values])
-        print(f"mean {key}:\tP: {avg_p:.2f} R: {avg_r:.2f} F: {avg_f:.2f}")
 
     return results

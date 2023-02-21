@@ -90,6 +90,19 @@ def get_merge_map(pair_index, preds, threshold):
 
     return merge_map
 
+def merge_tracksters(trackster_data, merged_tracksters, eid):
+    datalist = list(trackster_data[k][eid] for k in ARRAYS)
+    result = {
+        k: ak.Array([ak.flatten(datalist[i][list(set(tlist))]) for tlist in merged_tracksters])
+        for i, k in enumerate(ARRAYS)
+    }
+    # recompute barycentres
+    tve = result["vertices_energy"]
+    for coord in ("x", "y", "z"):
+        _bary = [np.average(vx, weights=ve) for vx, ve in zip(result[f"vertices_{coord}"], tve)]
+        result[f"barycenter_{coord}"] = ak.Array(_bary)
+    return result
+
 
 def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pileup=False):
     """
@@ -131,19 +144,7 @@ def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pi
             new_tracksters[new_l_idx] = []
 
     merged_tracksters = list(t for t in new_tracksters if t)
-    datalist = list(trackster_data[k][eid] for k in ARRAYS)
-    result = {
-        k: ak.Array([ak.flatten(datalist[i][list(set(tlist))]) for tlist in merged_tracksters])
-        for i, k in enumerate(ARRAYS)
-    }
-
-    # recompute barycentres
-    tve = result["vertices_energy"]
-    for coord in ("x", "y", "z"):
-        _bary = [np.average(vx, weights=ve) for vx, ve in zip(result[f"vertices_{coord}"], tve)]
-        result[f"barycenter_{coord}"] = ak.Array(_bary)
-
-    return result
+    return merge_tracksters(trackster_data, merged_tracksters, eid)
 
 
 def get_candidate_pairs_little_big(
