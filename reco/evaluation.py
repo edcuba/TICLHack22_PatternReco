@@ -191,7 +191,6 @@ def model_evaluation(
     decision_th=0.5,
     radius=10,
     max_events=100,
-    reco_to_target=False,
     bigT_e_th=50,
     pileup=False,
     collection="SC",
@@ -208,8 +207,6 @@ def model_evaluation(
         "reco_to_sim": []
     }
 
-    if reco_to_target:
-        results["reco_to_target"] = []
 
     for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
         print(f"Event {eid}:")
@@ -287,23 +284,22 @@ def model_evaluation(
         target_e = ak.Array([clusters_e[indices] for indices in target_i])
 
         # simulation
-        si = simtrackster_data[f"sts{collection}_vertices_indexes"][eid]
-        sm = simtrackster_data[f"sts{collection}_vertices_multiplicity"][eid]
+        p = "" if pileup else f"sts{collection}_"
+        si = simtrackster_data[f"{p}vertices_indexes"][eid]
+        sm = simtrackster_data[f"{p}vertices_multiplicity"][eid]
         se = ak.Array([clusters_e[indices] for indices in si])
 
         nhits = cluster_data["cluster_number_of_hits"][eid]
 
         results["clue3d_to_sim"].append(evaluate(nhits, ci, si, ce, se, cm, sm))
         results["target_to_sim"].append(evaluate(nhits, target_i, si, target_e, se, target_m, sm))
-
-        if reco_to_target:
-            results["reco_to_target"].append(evaluate(nhits, ri, target_i, re, target_e, rm, target_m))
-
         results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
 
         for key, values in results.items():
             vals = values[-1]
             print(f"\t{key}:\tP: {vals[0]:.3f} R: {vals[1]:.3f} F: {vals[2]:.3f}")
+
+        print(f"\t|S| = {len(si)} |T| = {len(target_i)} |R| = {len(ri)}")
 
     print("-----")
     for key, values in results.items():

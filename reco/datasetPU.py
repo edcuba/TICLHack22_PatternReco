@@ -76,7 +76,8 @@ def get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=False, 
         reco2sim_index = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
         reco2sim_sharedE = assoc_data[f"tsCLUE3D_recoToSim_{collection}_sharedE"][eid]
         raw_energy = trackster_data["raw_energy"][eid]
-        sim_bary_z = simtrackster_data[f"sts{collection}_barycenter_z"][eid]
+        p = "" if pileup else f"sts{collection}_"
+        sim_bary_z = simtrackster_data[f"{p}barycenter_z"][eid]
 
         # select only tracksters for which simdata is available
         bigTs = get_major_PU_tracksters(
@@ -410,7 +411,8 @@ class TracksterPairs(Dataset):
             print(f"Processing: {source}", file=sys.stderr)
             cluster_data, trackster_data, simtrackster_data, assoc_data = get_event_data(
                 source,
-                collection=self.collection
+                collection=self.collection,
+                pileup=self.pileup
             )
             for eid in range(len(trackster_data["barycenter_x"])):
                 dX, dY, _ = get_event_pairs(

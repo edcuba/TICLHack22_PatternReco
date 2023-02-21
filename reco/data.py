@@ -47,7 +47,7 @@ def clusters_by_indices(cluster_data, indices, eid):
     return t_x, t_y, t_z, t_e
 
 
-def get_data_arrays(clusters, tracksters, simtracksters, associations, collection="SC"):
+def get_data_arrays(clusters, tracksters, simtracksters, associations, collection="SC", pileup=False):
     trackster_data = tracksters.arrays(ARRAYS + FEATURE_KEYS + ['id_probabilities'])
     cluster_data = clusters.arrays([
         "position_x",
@@ -56,12 +56,14 @@ def get_data_arrays(clusters, tracksters, simtracksters, associations, collectio
         "energy",
         "cluster_number_of_hits",
     ])
+
+    p = "" if pileup else f"sts{collection}_"
     simtrackster_data = simtracksters.arrays([
-        f"sts{collection}_raw_energy",
-        f"sts{collection}_vertices_indexes",
-        f"sts{collection}_vertices_energy",
-        f"sts{collection}_vertices_multiplicity",
-        f"sts{collection}_barycenter_z"
+        f"{p}raw_energy",
+        f"{p}vertices_indexes",
+        f"{p}vertices_energy",
+        f"{p}vertices_multiplicity",
+        f"{p}barycenter_z"
     ])
     assoc_data = associations.arrays([
         f"tsCLUE3D_recoToSim_{collection}",
@@ -79,12 +81,19 @@ def get_bary_data(trackster_data, _eid):
     ]).T
 
 
-def get_event_data(source, collection="SC"):
+def get_event_data(source, collection="SC", pileup=True):
     tracksters = uproot.open({source: "ticlNtuplizer/tracksters"})
     simtracksters = uproot.open({source: f"ticlNtuplizer/simtracksters{collection}"})
     associations = uproot.open({source: "ticlNtuplizer/associations"})
     clusters = uproot.open({source: "ticlNtuplizer/clusters"})
-    return get_data_arrays(clusters, tracksters, simtracksters, associations, collection=collection)
+    return get_data_arrays(
+        clusters,
+        tracksters,
+        simtracksters,
+        associations,
+        collection=collection,
+        pileup=pileup
+    )
 
 
 def get_lc_data(cluster_data, trackster_data, _eid):
