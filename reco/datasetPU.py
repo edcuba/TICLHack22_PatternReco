@@ -404,7 +404,7 @@ class TracksterPairs(Dataset):
 
         for source in self.raw_file_names:
             print(f"Processing: {source}", file=sys.stderr)
-            cluster_data, trackster_data, simtrackster_data, assoc_data = get_event_data(
+            cluster_data, trackster_data, _, assoc_data = get_event_data(
                 source,
                 collection=self.collection,
                 pileup=self.pileup
@@ -501,9 +501,10 @@ class TracksterGraph(InMemoryDataset):
         data_list = []
         for source in self.raw_file_names:
             print(source, file=sys.stderr)
-            cluster_data, trackster_data, simtrackster_data, assoc_data = get_event_data(
+            cluster_data, trackster_data, _, assoc_data = get_event_data(
                 source,
-                collection=self.collection
+                collection=self.collection,
+                pileup=self.pileup,
             )
             for eid in range(len(trackster_data["barycenter_x"])):
                 data_list += get_event_graph(
