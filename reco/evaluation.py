@@ -252,7 +252,6 @@ def model_evaluation(
             dX = get_event_graph(
                 cluster_data,
                 trackster_data,
-                simtrackster_data,
                 assoc_data,
                 eid,
                 radius,
@@ -264,7 +263,6 @@ def model_evaluation(
             dX, dY, pair_index = get_event_pairs(
                 cluster_data,
                 trackster_data,
-                simtrackster_data,
                 assoc_data,
                 eid,
                 radius,

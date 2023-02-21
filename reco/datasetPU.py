@@ -47,15 +47,15 @@ def get_tracksters_in_cone(x1, x2, barycentres, radius=10):
 
 
 def get_major_PU_tracksters(
-    reco2sim,
+    reco2sim_sharedE,
     raw_energy,
-    sim_bary_z,
+    fraction_threshold=0.5,
 ):
     # assuming only one simtrackster to keep things easy
     big = []
 
-    for recoT_idx, (sim_indexes, shared_energies) in enumerate(reco2sim):
-        for simT_idx, shared_energy in zip(sim_indexes, shared_energies):
+    for recoT_idx, shared_energies in enumerate(reco2sim_sharedE):
+        for shared_energy in shared_energies:
             # 2 goals here:
             # - find the trackster with >50% shared energy
             # - find the tracksters with < 0.2 score
@@ -64,26 +64,25 @@ def get_major_PU_tracksters(
             t_energy = raw_energy[recoT_idx]
             se_fraction = shared_energy / t_energy
 
-            if se_fraction > 0.5 and sim_bary_z[simT_idx] > 0:
+            if se_fraction > fraction_threshold:
                 big.append(recoT_idx)
 
     return big
 
 
-def get_bigTs(trackster_data, simtrackster_data, assoc_data, eid, pileup=False, energy_th=50, collection="SC"):
+def get_bigTs(trackster_data, assoc_data, eid, pileup=False, energy_th=50, collection="SC"):
     if pileup:
         # get associations data
-        reco2sim_index = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
+        # reco2sim_index = assoc_data[f"tsCLUE3D_recoToSim_{collection}"][eid]
+        # p = "" if pileup else f"sts{collection}_"
+        # sim_bary_z = simtrackster_data[f"{p}barycenter_z"][eid]
         reco2sim_sharedE = assoc_data[f"tsCLUE3D_recoToSim_{collection}_sharedE"][eid]
         raw_energy = trackster_data["raw_energy"][eid]
-        p = "" if pileup else f"sts{collection}_"
-        sim_bary_z = simtrackster_data[f"{p}barycenter_z"][eid]
 
         # select only tracksters for which simdata is available
         bigTs = get_major_PU_tracksters(
-            zip(reco2sim_index, reco2sim_sharedE),
+            reco2sim_sharedE,
             raw_energy,
-            sim_bary_z,
         )
         return np.array(bigTs)[raw_energy[bigTs] > energy_th].tolist()
 
@@ -113,7 +112,6 @@ def get_neighborhood(trackster_data, vertices_z, eid, radius, bigT):
 def get_event_pairs(
         cluster_data,
         trackster_data,
-        simtrackster_data,
         assoc_data,
         eid,
         radius,
@@ -145,7 +143,6 @@ def get_event_pairs(
 
     bigTs = get_bigTs(
         trackster_data,
-        simtrackster_data,
         assoc_data,
         eid,
         pileup=pileup,
@@ -219,7 +216,6 @@ def get_event_pairs(
 def get_event_graph(
         cluster_data,
         trackster_data,
-        simtrackster_data,
         assoc_data,
         eid,
         radius=10,
@@ -255,7 +251,6 @@ def get_event_graph(
 
     bigTs = get_bigTs(
         trackster_data,
-        simtrackster_data,
         assoc_data,
         eid,
         pileup=pileup,
@@ -418,7 +413,6 @@ class TracksterPairs(Dataset):
                 dX, dY, _ = get_event_pairs(
                     cluster_data,
                     trackster_data,
-                    simtrackster_data,
                     assoc_data,
                     eid,
                     self.RADIUS,
@@ -515,7 +509,6 @@ class TracksterGraph(InMemoryDataset):
                 data_list += get_event_graph(
                     cluster_data,
                     trackster_data,
-                    simtrackster_data,
                     assoc_data,
                     eid,
                     self.RADIUS,
