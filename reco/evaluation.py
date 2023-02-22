@@ -188,7 +188,7 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
     max_e_sample_idx = -1
     max_e_sample_e = -1
 
-    bigTs = []
+    p_list = []
 
     preds = []
     truths = []
@@ -199,7 +199,7 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
     # TODO: for pileup, we need to merge all foregrounds
     for s_idx, sample in enumerate(dX):
         bigT_idx = torch.argmax(sample.x[:, 0]).item()
-        bigTs.append(sample.node_index[bigT_idx].item())
+        p_list.append(sample.node_index[bigT_idx].item())
 
         bigT_e = sample.e[bigT_idx]
         if bigT_e > max_e_sample_e:
@@ -232,8 +232,8 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
                 shared_e = np.sum(eng[shared])
                 fg_e = np.sum(eng[reco_fg_set])
 
-                if shared_e >= t_eng / 2 or shared_e >= fg_e / 2:
-                    t += reco_fg
+                if shared_e >= t_eng * 0.4 or shared_e >= fg_e * 0.4:
+                    t += reco_fg_set.difference(shared)
                     break
 
                 if t_eng >= fg_e:
@@ -251,10 +251,10 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
 
                 t_eng = np.sum(eng[t])
                 shared_e = np.sum(eng[shared])
-                fg_e = np.sum(eng[reco_fg_set])
+                fg_e = np.sum(eng[target_fg_set])
 
-                if shared_e >= t_eng / 2 or shared_e >= fg_e / 2:
-                    t += target_fg
+                if shared_e >= t_eng * 0.4 or shared_e >= fg_e * 0.4:
+                    t += target_fg_set.difference(shared)
                     break
 
                 if t_eng >= fg_e:
@@ -282,7 +282,6 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
 
     reco = merge_tracksters(trackster_data, reco_tracksters, eid)
     target = merge_tracksters(trackster_data, target_tracksters, eid)
-    p_list = bigTs
     return reco, target, p_list
 
 
