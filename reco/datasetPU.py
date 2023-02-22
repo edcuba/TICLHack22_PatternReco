@@ -222,6 +222,7 @@ def get_event_graph(
         bigT_e_th=10,
         pileup=False,
         collection="SC",
+        link_prediction=False,
     ):
     data_list = []
 
@@ -262,14 +263,26 @@ def get_event_graph(
         trackster_data[k][eid] for k in FEATURE_KEYS
     ])
 
+    node_features = []
+    node_labels = []
+    node_index = []
+    node_pos = []
+    node_eng = []
+    node_shared_e = []
+    node_simT_idx = []
+    edge_index = []
+    edge_labels = []
+
     for bigT in bigTs:
         # produce a graph for each bigT
-        node_features = []
-        node_labels = []
-        node_index = []
-        node_pos = []
-        node_eng = []
-        node_shared_e = []
+        if not link_prediction:
+            node_features = []
+            node_labels = []
+            node_index = []
+            node_pos = []
+            node_eng = []
+            node_shared_e = []
+            node_simT_idx = []
 
         # find index of the best score
         bigT_best_score_idx = np.argmin(reco2sim_score[bigT])
@@ -277,7 +290,7 @@ def get_event_graph(
         bigT_simT_idx = reco2sim_idx[bigT][bigT_best_score_idx]
 
         # get the best score
-        # bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
+        bigT_best_score = reco2sim_score[bigT][bigT_best_score_idx]
 
         in_cone = get_neighborhood(trackster_data, vertices_z, eid, radius, bigT)
         for recoTxId, distance in in_cone:
@@ -320,17 +333,35 @@ def get_event_graph(
             node_pos.append(bary[recoTxId].tolist())
             node_eng.append(raw_energy[recoTxId])
             node_shared_e.append(shared_e)
+            node_simT_idx.append(bigT_simT_idx)
+            edge_index.append((recoTxId, bigT))
+            edge_labels.append(label * (1 - bigT_best_score))
 
-        data_list.append(Data(
+        if not link_prediction:
+            data_list.append(Data(
+                x=torch.tensor(node_features, dtype=torch.float),
+                e=torch.tensor(node_eng, dtype=torch.float),
+                shared_e=torch.tensor(node_shared_e, dtype=torch.float),
+                pos=torch.tensor(node_pos, dtype=torch.float),
+                y=torch.tensor(node_labels, dtype=torch.float),
+                node_index=torch.tensor(node_index, dtype=torch.int),
+                simT=torch.tensor(node_simT_idx, dtype=torch.int)
+            ))
+    if link_prediction:
+        if not edge_index:
+            return []
+        return [Data(
             x=torch.tensor(node_features, dtype=torch.float),
             e=torch.tensor(node_eng, dtype=torch.float),
             shared_e=torch.tensor(node_shared_e, dtype=torch.float),
             pos=torch.tensor(node_pos, dtype=torch.float),
-            y=torch.tensor(node_labels, dtype=torch.float),
-            node_index=torch.tensor(node_index, dtype=torch.int)
-        ))
+            edge_index=torch.tensor(edge_index, dtype=torch.long).T,
+            y=torch.tensor(edge_labels, dtype=torch.float),
+            node_index=torch.tensor(node_index, dtype=torch.long),
+            simT_score=torch.tensor(node_labels, dtype=torch.float),
+            simT=torch.tensor(node_simT_idx, dtype=torch.long)
+        )]
     return data_list
-
 
 
 class TracksterPairs(Dataset):
@@ -458,6 +489,7 @@ class TracksterGraph(InMemoryDataset):
             score_threshold=0.2,
             bigT_e_th=10,
             collection="SC",
+            link_prediction=False,
         ):
         self.name = name
         self.pileup = pileup
@@ -467,6 +499,7 @@ class TracksterGraph(InMemoryDataset):
         self.RADIUS = radius
         self.bigT_e_th = bigT_e_th
         self.collection = collection
+        self.link_prediction = link_prediction
         self.SCORE_THRESHOLD = score_threshold
         super(TracksterGraph, self).__init__(root_dir, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -491,6 +524,8 @@ class TracksterGraph(InMemoryDataset):
             f"s{self.SCORE_THRESHOLD}",
             f"eth{self.bigT_e_th}"
         ]
+        if self.link_prediction:
+            infos.append("lp")
         return list([f"TracksterGraph{'PU' if self.pileup else ''}_{'_'.join(infos)}.pt"])
 
     @property
@@ -515,7 +550,8 @@ class TracksterGraph(InMemoryDataset):
                     self.RADIUS,
                     pileup=self.pileup,
                     bigT_e_th=self.bigT_e_th,
-                    collection=self.collection
+                    collection=self.collection,
+                    link_prediction=self.link_prediction,
                 )
 
         data, slices = self.collate(data_list)
@@ -528,4 +564,6 @@ class TracksterGraph(InMemoryDataset):
             f"radius={self.RADIUS}",
             f"bigT_e_th={self.bigT_e_th}",
         ]
+        if self.link_prediction:
+            infos.append("lp")
         return f"TracksterGraph{'PU' if self.pileup else ''}({', '.join(infos)})"

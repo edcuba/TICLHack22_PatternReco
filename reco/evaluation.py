@@ -242,7 +242,8 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
                     for sh in shared:
                         t.remove(sh)
             else:
-                reco_tracksters.append(reco_fg)
+                if len(reco_fg_set):
+                    reco_tracksters.append(list(reco_fg_set))
 
             for t in target_tracksters:
                 shared = set(t).intersection(target_fg_set)
@@ -263,7 +264,8 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
                     for sh in shared:
                         t.remove(sh)
             else:
-                target_tracksters.append(target_fg)
+                if len(target_fg_set):
+                    target_tracksters.append(list(target_fg_set))
 
     else:
         p = preds[max_e_sample_idx]
