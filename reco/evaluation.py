@@ -181,39 +181,108 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
         results
     return results
 
-def eval_graph_fb(trackster_data, eid, dX, model, decision_th=0.5):
+def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5):
     # this is the foreground-background case
+    # we only got one particle, so whatever foregrounds are overlapping, we join them
     # pick the sample with the highest energy
-    max_e_sample = None
-    max_e_sample_e = 0
-    for sample in dX:
+    max_e_sample_idx = -1
+    max_e_sample_e = -1
+
+    bigTs = []
+
+    preds = []
+    truths = []
+    nodes = []
+
+    eng = trackster_data["raw_energy"][eid]
+
+    # TODO: for pileup, we need to merge all foregrounds
+    for s_idx, sample in enumerate(dX):
         bigT_idx = torch.argmax(sample.x[:, 0]).item()
+        bigTs.append(sample.node_index[bigT_idx].item())
+
         bigT_e = sample.e[bigT_idx]
         if bigT_e > max_e_sample_e:
-            max_e_sample = sample
+            max_e_sample_idx = s_idx
             max_e_sample_e = bigT_e
 
+        preds.append(model(sample.x).detach().cpu().reshape(-1))
+        truths.append(sample.y.detach().cpu().reshape(-1))
+        nodes.append(sample.node_index.detach().cpu().reshape(-1))
+
     # process the sample
-    sample = max_e_sample
-    preds = model(sample.x).detach().cpu().reshape(-1)
-    truth = sample.y.detach().cpu().reshape(-1)
-    nodes = sample.node_index.detach().cpu().reshape(-1)
-
     reco_tracksters = []
-    reco_fg = nodes[preds >= decision_th].tolist()
-    reco_bg = nodes[preds < decision_th].tolist()
-    if reco_fg: reco_tracksters.append(reco_fg)
-    if reco_bg: reco_tracksters.append(reco_bg)
-
     target_tracksters = []
-    target_fg = nodes[truth >= decision_th].tolist()
-    target_bg = nodes[truth < decision_th].tolist()
-    if target_fg: target_tracksters.append(target_fg)
-    if target_bg: target_tracksters.append(target_bg)
+
+    if pileup:
+        for p, t, n in zip(preds, truths, nodes):
+            reco_fg = n[p >= decision_th].tolist()
+            target_fg = n[t >= decision_th].tolist()
+
+            # merging
+            reco_fg_set = set(reco_fg)
+            target_fg_set = set(target_fg)
+
+            for t in reco_tracksters:
+                shared = set(t).intersection(reco_fg_set)
+                if len(shared) == 0:
+                    continue
+
+                t_eng = np.sum(eng[t])
+                shared_e = np.sum(eng[shared])
+                fg_e = np.sum(eng[reco_fg_set])
+
+                if shared_e >= t_eng / 2 or shared_e >= fg_e / 2:
+                    t += reco_fg
+                    break
+
+                if t_eng >= fg_e:
+                    reco_fg_set.difference_update(shared)
+                else:
+                    for sh in shared:
+                        t.remove(sh)
+            else:
+                reco_tracksters.append(reco_fg)
+
+            for t in target_tracksters:
+                shared = set(t).intersection(target_fg_set)
+                if len(shared) == 0:
+                    continue
+
+                t_eng = np.sum(eng[t])
+                shared_e = np.sum(eng[shared])
+                fg_e = np.sum(eng[reco_fg_set])
+
+                if shared_e >= t_eng / 2 or shared_e >= fg_e / 2:
+                    t += target_fg
+                    break
+
+                if t_eng >= fg_e:
+                    target_fg_set.difference_update(shared)
+                else:
+                    for sh in shared:
+                        t.remove(sh)
+            else:
+                target_tracksters.append(target_fg)
+
+    else:
+        p = preds[max_e_sample_idx]
+        t = truths[max_e_sample_idx]
+        n = nodes[max_e_sample_idx]
+
+        reco_fg = n[p >= decision_th].tolist()
+        reco_bg = n[p < decision_th].tolist()
+        if reco_fg: reco_tracksters.append(reco_fg)
+        if reco_bg: reco_tracksters.append(reco_bg)
+
+        target_fg = n[t >= decision_th].tolist()
+        target_bg = n[t < decision_th].tolist()
+        if target_fg: target_tracksters.append(target_fg)
+        if target_bg: target_tracksters.append(target_bg)
 
     reco = merge_tracksters(trackster_data, reco_tracksters, eid)
     target = merge_tracksters(trackster_data, target_tracksters, eid)
-    p_list = nodes.tolist()
+    p_list = bigTs
     return reco, target, p_list
 
 
@@ -245,7 +314,8 @@ def model_evaluation(
     if reco_eval:
         results["reco_to_sim"] = []
 
-    for eid in range(min([len(trackster_data["raw_energy"]), max_events])):
+    actual_range = min([len(trackster_data["raw_energy"]), max_events])
+    for eid in range(actual_range):
         print(f"Event {eid}:")
 
         if graph:
@@ -277,7 +347,14 @@ def model_evaluation(
 
         # predict edges
         if graph:
-            reco, target, p_list = eval_graph_fb(trackster_data, eid, dX, model, decision_th=decision_th)
+            reco, target, p_list = eval_graph_fb(
+                trackster_data,
+                eid,
+                dX,
+                model,
+                pileup=pileup,
+                decision_th=decision_th
+            )
         else:
             preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
             truth = np.array(dY)
@@ -334,9 +411,9 @@ def model_evaluation(
 
     print("-----")
     for key, values in results.items():
-        avg_p = np.mean([x[0] for x in values])
-        avg_r = np.mean([x[1] for x in values])
-        avg_f = np.mean([x[2] for x in values])
+        avg_p = np.sum([x[0] for x in values]) / actual_range
+        avg_r = np.sum([x[1] for x in values]) / actual_range
+        avg_f = np.sum([x[2] for x in values]) / actual_range
         print(f"mean {key}:\tP: {avg_p:.3f} R: {avg_r:.3f} F: {avg_f:.3f}")
 
     return results

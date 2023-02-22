@@ -30,8 +30,8 @@ class DynamicEdgeConvBlock(nn.Module):
         super(DynamicEdgeConvBlock, self).__init__()
         self.dynamicgraphconv = DynamicEdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr, k=k)
 
-    def forward(self, X, _=None):
-        return self.dynamicgraphconv(X)
+    def forward(self, X, batch=None):
+        return self.dynamicgraphconv(X, batch=batch)
 
 
 class EdgeConvBlock(nn.Module):
