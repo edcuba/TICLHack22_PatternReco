@@ -10,7 +10,7 @@ class QualityFocalLoss(nn.Module):
         self.gamma = gamma
 
     def forward(self, predictions, targets):
-        bce_loss = F.binary_cross_entropy(predictions, targets, reduction='none')
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='none')
         modulator = torch.abs(targets - predictions) ** self.gamma
         return (modulator * bce_loss).mean()
 
@@ -36,7 +36,7 @@ class FocalLoss(nn.Module):
             - foreground term
             - In practice may be set by inverse class frequency to begin with
         """
-        bce_loss = F.binary_cross_entropy(predictions, targets)
+        bce_loss = F.binary_cross_entropy_with_logits(predictions, targets)
         p_t = torch.exp(-bce_loss)
         alpha_tensor = (1 - self.alpha) + targets * (2 * self.alpha - 1)
         # alpha if target = 1 and 1 - alpha if target = 0

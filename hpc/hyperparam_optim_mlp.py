@@ -40,7 +40,6 @@ def get_model(ds, config):
         act(),
         nn.Linear(hdim3, 1),
         nn.Dropout(p=config["dropout"]),
-        nn.Sigmoid()
     )
 
     return model

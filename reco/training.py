@@ -120,7 +120,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.7):
             data = data.to(device)
             ei = data.edge_index
             if ei is not None:
-                model_pred = model(data.x, data.batch, ei)
+                model_pred = model(data.x, ei, data.batch)
             else:
                 model_pred = model(data.x, data.batch)
         else:
@@ -166,7 +166,7 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7
                 data = data.to(device)
                 ei = data.edge_index
                 if ei is not None:
-                    model_pred = model(data.x, data.batch, ei)
+                    model_pred = model(data.x, ei, data.batch)
                 else:
                     model_pred = model(data.x, data.batch)
             else:

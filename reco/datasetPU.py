@@ -270,7 +270,8 @@ def get_event_graph(
     node_eng = []
     node_shared_e = []
     node_simT_idx = []
-    edge_index = []
+    bigT_index = []
+    index_map = {}
     edge_labels = []
 
     for bigT in bigTs:
@@ -294,6 +295,20 @@ def get_event_graph(
 
         in_cone = get_neighborhood(trackster_data, vertices_z, eid, radius, bigT)
         for recoTxId, distance in in_cone:
+
+            # find out the index of the simpartice we are looking for
+            recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
+            label = (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
+
+            if link_prediction:
+                if bigT != recoTxId:
+                    edge_labels.append(label * (1 - bigT_best_score))
+                    bigT_index.append((recoTxId, bigT))
+                if recoTxId in index_map:
+                    # already in the graph - just add an edge
+                    continue
+                else:
+                    index_map[recoTxId] = len(node_labels)
 
             recoTx_graph = create_graph(
                 vertices_x[recoTxId],
@@ -320,11 +335,7 @@ def get_event_graph(
             features += id_probs[recoTxId]
             features += get_graph_level_features(recoTx_graph)
 
-            # find out the index of the simpartice we are looking for
-            recoTx_bigT_simT_idx = np.argwhere(reco2sim_idx[recoTxId] == bigT_simT_idx)[0][0]
-
             # get the score for the given simparticle and compute the score
-            label = (1 - reco2sim_score[recoTxId][recoTx_bigT_simT_idx])
             shared_e = reco2sim_shared_e[recoTxId][recoTx_bigT_simT_idx]
 
             node_features.append(features)
@@ -334,8 +345,6 @@ def get_event_graph(
             node_eng.append(raw_energy[recoTxId])
             node_shared_e.append(shared_e)
             node_simT_idx.append(bigT_simT_idx)
-            edge_index.append((recoTxId, bigT))
-            edge_labels.append(label * (1 - bigT_best_score))
 
         if not link_prediction:
             data_list.append(Data(
@@ -348,8 +357,9 @@ def get_event_graph(
                 simT=torch.tensor(node_simT_idx, dtype=torch.int)
             ))
     if link_prediction:
-        if not edge_index:
+        if not bigT_index:
             return []
+        edge_index = [(index_map[a], index_map[b]) for a, b in bigT_index]
         return [Data(
             x=torch.tensor(node_features, dtype=torch.float),
             e=torch.tensor(node_eng, dtype=torch.float),
