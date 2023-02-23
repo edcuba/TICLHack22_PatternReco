@@ -54,11 +54,14 @@ class GraphClassificationLoss(nn.Module):
         super(GraphClassificationLoss, self).__init__()
 
     def forward(self, data, preds):
+        """
+        Input is (foreground, background) probabilities (softmax) per sample
+        """
         foreground_shared_e = 1 + batch_sum(data.e, data.batch)
         background_shared_e = 1 + batch_sum(data.e - data.shared_e, data.batch)
 
-        foreground = batch_sum(data.shared_e * (preds - data.y)**2, data.batch)
-        background = batch_sum((data.e - data.shared_e) * ((1 - preds) - (1 - data.y))**2, data.batch)
+        foreground = batch_sum(data.shared_e * (preds[:,0] - data.y)**2, data.batch)
+        background = batch_sum((data.e - data.shared_e) * (preds[:,1] - (1 - data.y))**2, data.batch)
 
         batches = foreground / foreground_shared_e + background / background_shared_e
 

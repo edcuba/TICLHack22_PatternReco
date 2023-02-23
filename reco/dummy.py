@@ -7,8 +7,21 @@ class DummyModel:
         pass
 
 class DummyPleaser(DummyModel):
-    def __call__(self, X):
-        return torch.tensor(np.ones(len(X)))
+
+    def __init__(self, output_dim=1) -> None:
+        super(DummyPleaser).__init__()
+        self.output_dim = output_dim
+
+    def __call__(self, X, edge_list=None):
+
+        out_size = len(X)
+        if edge_list is not None:
+            out_size = len(edge_list)
+
+        if self.output_dim == 1:
+            return torch.tensor(np.ones(out_size))
+
+        return torch.tensor(np.ones((out_size, self.output_dim)))
 
 class DummyGuesser(DummyModel):
     def __call__(self, X):

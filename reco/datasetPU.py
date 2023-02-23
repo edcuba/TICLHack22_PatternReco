@@ -323,12 +323,15 @@ def get_event_graph(
                 vertices_z[recoTxId],
             )
 
-            features = [
-                int(recoTxId == bigT),
-                distance,
-                len(vertices_z[recoTxId]),
-            ]
+            if link_prediction:
+                features = []
+            else:
+                features = [
+                    int(recoTxId == bigT),
+                    distance,
+                ]
 
+            features.append(len(vertices_z[recoTxId]))
             features += [f[recoTxId] for f in trackster_features]
             features += minP
             features += maxP

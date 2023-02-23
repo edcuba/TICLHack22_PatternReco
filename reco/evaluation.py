@@ -181,6 +181,28 @@ def baseline_evaluation(callable_fn, cluster_data, trackster_data, simtrackster_
         results
     return results
 
+
+def eval_graph_lp(trackster_data, eid, dX, model, pileup=False, decision_th=0.5):
+
+    pairs = []
+    preds = []
+    truths = []
+
+    for sample in dX:
+
+        nidx = sample.node_index
+
+        preds += model(sample.x, sample.edge_index).reshape(-1).tolist()
+        truths += sample.y.tolist()
+        pairs += [(nidx[a].item(), nidx[b].item()) for a, b in sample.edge_index.T]
+
+    # rebuild the event
+    reco = remap_tracksters(trackster_data, pairs, preds, eid, decision_th=decision_th, pileup=pileup)
+    target = remap_tracksters(trackster_data, pairs, truths, eid, decision_th=decision_th, pileup=pileup)
+    p_list = list(set(b for _, b in pairs))
+    return reco, target, p_list
+
+
 def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5):
     # this is the foreground-background case
     # we only got one particle, so whatever foregrounds are overlapping, we join them
@@ -196,7 +218,6 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
 
     eng = trackster_data["raw_energy"][eid]
 
-    # TODO: for pileup, we need to merge all foregrounds
     for s_idx, sample in enumerate(dX):
         bigT_idx = torch.argmax(sample.x[:, 0]).item()
         p_list.append(sample.node_index[bigT_idx].item())
@@ -206,7 +227,7 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
             max_e_sample_idx = s_idx
             max_e_sample_e = bigT_e
 
-        preds.append(model(sample.x).detach().cpu().reshape(-1))
+        preds.append(model(sample.x).detach().cpu()[:,0].reshape(-1))
         truths.append(sample.y.detach().cpu().reshape(-1))
         nodes.append(sample.node_index.detach().cpu().reshape(-1))
 
@@ -301,6 +322,7 @@ def model_evaluation(
     collection="SC",
     graph=False,
     reco_eval=True,
+    link_prediction=False,
 ):
     """
     Evaluation must be unbalanced
@@ -328,7 +350,8 @@ def model_evaluation(
                 radius,
                 pileup=pileup,
                 bigT_e_th=bigT_e_th,
-                collection=collection
+                collection=collection,
+                link_prediction=link_prediction,
             )
         else:
             dX, dY, pair_index = get_event_pairs(
@@ -347,7 +370,16 @@ def model_evaluation(
             continue
 
         # predict edges
-        if graph:
+        if graph and link_prediction:
+            reco, target, p_list = eval_graph_lp(
+                trackster_data,
+                eid,
+                dX,
+                model,
+                pileup=pileup,
+                decision_th=decision_th
+            )
+        elif graph and not link_prediction:
             reco, target, p_list = eval_graph_fb(
                 trackster_data,
                 eid,

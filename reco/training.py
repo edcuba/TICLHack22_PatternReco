@@ -122,7 +122,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.7):
             if ei is not None:
                 model_pred = model(data.x, ei, data.batch)
             else:
-                model_pred = model(data.x, data.batch)
+                model_pred = model(data.x, data.batch)[:,0]
         else:
             b, l = data
             model_pred = model(b.to(device))
@@ -135,7 +135,7 @@ def roc_auc(model, device, test_dl, truth_threshold=0.7):
 
 
 @torch.no_grad()
-def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7, step=1, focus_metric="b_acc"):
+def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7, step=1, focus_metric="fbeta"):
     """
     Plot the precision/recall curve depending on the decision threshold
 
@@ -168,7 +168,7 @@ def precision_recall_curve(model, device, test_dl, beta=0.5, truth_threshold=0.7
                 if ei is not None:
                     model_pred = model(data.x, ei, data.batch)
                 else:
-                    model_pred = model(data.x, data.batch)
+                    model_pred = model(data.x, data.batch)[:,0]
             else:
                 b, l = data
                 model_pred = model(b.to(device))
