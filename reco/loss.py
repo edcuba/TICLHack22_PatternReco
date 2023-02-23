@@ -11,7 +11,7 @@ class QualityFocalLoss(nn.Module):
 
     def forward(self, predictions, targets):
         bce_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='none')
-        modulator = torch.abs(targets - predictions) ** self.gamma
+        modulator = (targets - predictions) ** self.gamma
         return (modulator * bce_loss).mean()
 
 
@@ -53,7 +53,7 @@ class GraphClassificationLoss(nn.Module):
     def __init__(self):
         super(GraphClassificationLoss, self).__init__()
 
-    def forward(self, data, preds):
+    def forward(self, preds, data):
         """
         Input is (foreground, background) probabilities (softmax) per sample
         """
