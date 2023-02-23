@@ -12,7 +12,7 @@ class QualityFocalLoss(nn.Module):
     def forward(self, predictions, targets):
         bce_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='none')
         modulator = (targets - predictions) ** self.gamma
-        return (modulator * bce_loss).mean()
+        return (modulator * bce_loss).sum()
 
 
 class FocalLoss(nn.Module):

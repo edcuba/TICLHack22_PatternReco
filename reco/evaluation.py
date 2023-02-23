@@ -336,6 +336,7 @@ def model_evaluation(
 
     if reco_eval:
         results["reco_to_sim"] = []
+        results["n_tracksters"] = []
 
     actual_range = min([len(trackster_data["raw_energy"]), max_events])
     for eid in range(actual_range):
@@ -436,10 +437,13 @@ def model_evaluation(
             results["reco_to_sim"].append(evaluate(nhits, ri, si, re, se, rm, sm))
 
         for key, values in results.items():
+            if key == "n_tracksters":
+                continue
             vals = values[-1]
             print(f"\t{key}:\tP: {vals[0]:.3f} R: {vals[1]:.3f} F: {vals[2]:.3f}")
 
         if reco_eval:
+            results["n_tracksters"].append((len(si), len(target_i), len(ri)))
             print(f"\t|S| = {len(si)} |T| = {len(target_i)} |R| = {len(ri)}")
 
     print("-----")
