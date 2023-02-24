@@ -197,8 +197,8 @@ def eval_graph_lp(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
         pairs += [(nidx[a].item(), nidx[b].item()) for a, b in sample.edge_index.T]
 
     # rebuild the event
-    reco = remap_tracksters(trackster_data, pairs, preds, eid, decision_th=decision_th, pileup=pileup)
-    target = remap_tracksters(trackster_data, pairs, truths, eid, decision_th=decision_th, pileup=pileup)
+    reco = remap_tracksters(trackster_data, pairs, preds, eid, decision_th=decision_th, pileup=pileup, allow_multiple=True)
+    target = remap_tracksters(trackster_data, pairs, truths, eid, decision_th=decision_th, pileup=pileup, allow_multiple=True)
     p_list = list(set(b for _, b in pairs))
     return reco, target, p_list
 

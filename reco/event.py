@@ -85,10 +85,27 @@ def get_merge_map(pair_index, preds, threshold):
     for (little, big), p in zip(pair_index, preds):
         if p > threshold:
             if not little in score_map or score_map[little] < p:
-                merge_map[little] = big
+                merge_map[little] = [big]
                 score_map[little] = p
 
     return merge_map
+
+
+def get_merge_map_multi(pair_index, preds, threshold):
+    """
+        Performs the little-big mapping
+        Respects the highest prediction score for each little
+    """
+    merge_map = {}
+
+    # should always be (little, big)
+    for (little, big), p in zip(pair_index, preds):
+        if p > threshold:
+            if not little in merge_map:
+                merge_map[little] = []
+            merge_map[little].append(big)
+    return merge_map
+
 
 def merge_tracksters(trackster_data, merged_tracksters, eid):
     datalist = list(trackster_data[k][eid] for k in ARRAYS)
@@ -104,11 +121,14 @@ def merge_tracksters(trackster_data, merged_tracksters, eid):
     return result
 
 
-def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pileup=False):
+def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pileup=False, allow_multiple=False):
     """
         provide a mapping in format (source: target)
     """
-    new_mapping = get_merge_map(pair_index, preds, decision_th)
+    if allow_multiple:
+        new_mapping = get_merge_map_multi(pair_index, preds, decision_th)
+    else:
+        new_mapping = get_merge_map(pair_index, preds, decision_th)
 
     if pileup:
         # only include right-handed tracksters
@@ -120,28 +140,29 @@ def remap_tracksters(trackster_data, pair_index, preds, eid, decision_th=0.5, pi
 
     new_idx_map = {o[0]: i for i, o in enumerate(new_tracksters)}
 
-    for l, b in new_mapping.items():
-        new_b_idx = new_idx_map[b]
-        new_l_idx = new_idx_map.get(l, -1)
+    for l, bigs in new_mapping.items():
+        for b in bigs:
+            new_b_idx = new_idx_map[b]
+            new_l_idx = new_idx_map.get(l, -1)
 
-        if l == b or new_l_idx == new_b_idx:
-            # sanity check: same trackster or already merged
-            #   otherwise we delete the trackster
-            continue
+            if l == b or new_l_idx == new_b_idx:
+                # sanity check: same trackster or already merged
+                #   otherwise we delete the trackster
+                continue
 
-        if new_l_idx == -1:
-            # assign to a trackster
-            new_tracksters[new_b_idx].append(l)
-            new_idx_map[l] = new_b_idx
-        else:
-            # merge tracksters
-            new_tracksters[new_b_idx] += new_tracksters[new_l_idx]
-            # forward dictionary references
-            for k, v in new_idx_map.items():
-                if v == new_l_idx:
-                    new_idx_map[k] = new_b_idx
-            # remove the old record
-            new_tracksters[new_l_idx] = []
+            if new_l_idx == -1:
+                # assign to a trackster
+                new_tracksters[new_b_idx].append(l)
+                new_idx_map[l] = new_b_idx
+            else:
+                # merge tracksters
+                new_tracksters[new_b_idx] += new_tracksters[new_l_idx]
+                # forward dictionary references
+                for k, v in new_idx_map.items():
+                    if v == new_l_idx:
+                        new_idx_map[k] = new_b_idx
+                # remove the old record
+                new_tracksters[new_l_idx] = []
 
     merged_tracksters = list(t for t in new_tracksters if t)
     return merge_tracksters(trackster_data, merged_tracksters, eid)
