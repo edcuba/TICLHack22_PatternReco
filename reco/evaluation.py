@@ -203,7 +203,7 @@ def eval_graph_lp(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
     return reco, target, p_list
 
 
-def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5):
+def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, multiparticle=False, decision_th=0.5):
     # this is the foreground-background case
     # we only got one particle, so whatever foregrounds are overlapping, we join them
     # pick the sample with the highest energy
@@ -235,7 +235,7 @@ def eval_graph_fb(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
     reco_tracksters = []
     target_tracksters = []
 
-    if pileup:
+    if pileup or multiparticle:
         for p, t, n in zip(preds, truths, nodes):
             reco_fg = n[p >= decision_th].tolist()
             target_fg = n[t >= decision_th].tolist()
@@ -323,6 +323,7 @@ def model_evaluation(
     graph=False,
     reco_eval=True,
     link_prediction=False,
+    multiparticle=False,
 ):
     """
     Evaluation must be unbalanced
@@ -387,7 +388,8 @@ def model_evaluation(
                 dX,
                 model,
                 pileup=pileup,
-                decision_th=decision_th
+                decision_th=decision_th,
+                multiparticle=multiparticle,
             )
         else:
             preds = model(torch.tensor(dX, dtype=torch.float)).detach().cpu().reshape(-1).tolist()
