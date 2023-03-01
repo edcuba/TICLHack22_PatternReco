@@ -198,7 +198,7 @@ def eval_graph_lp(trackster_data, eid, dX, model, pileup=False, decision_th=0.5)
 
     # rebuild the event
     reco = remap_tracksters(trackster_data, pairs, preds, eid, decision_th=decision_th, pileup=pileup, allow_multiple=True)
-    target = remap_tracksters(trackster_data, pairs, truths, eid, decision_th=decision_th, pileup=pileup, allow_multiple=True)
+    target = remap_tracksters(trackster_data, pairs, truths, eid, decision_th=decision_th, pileup=pileup, allow_multiple=False)
     p_list = list(set(b for _, b in pairs))
     return reco, target, p_list
 

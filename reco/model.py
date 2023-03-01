@@ -26,7 +26,7 @@ class EdgeConvNet(nn.Module):
 
 class DynamicEdgeConvBlock(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim, aggr="add", k=8):
+    def __init__(self, input_dim, hidden_dim, aggr="mean", k=8):
         super(DynamicEdgeConvBlock, self).__init__()
         self.dynamicgraphconv = DynamicEdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr, k=k)
 
@@ -36,7 +36,7 @@ class DynamicEdgeConvBlock(nn.Module):
 
 class EdgeConvBlock(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim, aggr="add", skip=False):
+    def __init__(self, input_dim, hidden_dim, aggr="mean", skip=False):
         super(EdgeConvBlock, self).__init__()
         self.skip = skip
         self.graphconv = EdgeConv(nn=EdgeConvNet(input_dim, hidden_dim), aggr=aggr)
